@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// Rute eksplisit untuk menangani halaman utama (karena index.html sejajar dengan server.js)
+// Rute utama untuk menampilkan index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -28,7 +28,8 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
 
 // Skema & Data Awal (Seeder Otomatis)
 function initDatabase() {
-  db.serialize(async () => {
+  db.serialize(() => {
+    // Tabel Users
     db.run(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -36,6 +37,26 @@ function initDatabase() {
       role TEXT NOT NULL,
       nama TEXT NOT NULL,
       must_change_password INTEGER DEFAULT 1
+    )`);
+
+    // Tabel Anggota / Nasabah (Contoh tambahan tabel data warga)
+    db.run(`CREATE TABLE IF NOT EXISTS members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nik TEXT,
+      nama TEXT NOT NULL,
+      alamat TEXT,
+      no_hp TEXT,
+      kategori TEXT
+    )`);
+
+    // Tabel Transaksi Kas
+    db.run(`CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      jenis TEXT NOT NULL,
+      keterangan TEXT,
+      jumlah REAL NOT NULL,
+      kategori_kas TEXT
     )`);
 
     // Masukkan Super Admin Default
@@ -47,11 +68,7 @@ function initDatabase() {
           ['admin', hashedPassword, 'SUPER_ADMIN', 'Super Admin RT/RW', 1],
           (err) => {
             if (!err) {
-              console.log('==================================================');
               console.log('Akun Super Admin Default Berhasil Dibuat!');
-              console.log('Username: admin');
-              console.log('Password: admin123');
-              console.log('==================================================');
             }
           }
         );
@@ -59,6 +76,8 @@ function initDatabase() {
     });
   });
 }
+
+// ==================== ENDPOINT AUTHENTICATION ====================
 
 // Endpoint Login
 app.post('/api/login', (req, res) => {
@@ -96,7 +115,7 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// Endpoint Ganti Password Pertama
+// Endpoint Ganti Password
 app.post('/api/change-password', async (req, res) => {
   const { username, newPassword } = req.body;
 
@@ -114,6 +133,65 @@ app.post('/api/change-password', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Gagal memperbarui password.' });
       }
       res.json({ success: true, message: 'Password berhasil diperbarui!' });
+    }
+  );
+});
+
+// ==================== ENDPOINT DATA ANGGOTA / NASABAH ====================
+
+// Ambil Semua Data Anggota
+app.get('/api/members', (req, res) => {
+  db.all(`SELECT * FROM members`, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: 'Gagal mengambil data anggota.' });
+    }
+    res.json({ success: true, data: rows });
+  });
+});
+
+// Tambah Anggota Baru
+app.post('/api/members', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  if (!nama) {
+    return res.status(400).json({ success: false, message: 'Nama wajib diisi!' });
+  }
+
+  db.run(
+    `INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`,
+    [nik, nama, alamat, no_hp, kategori],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ success: false, message: 'Gagal menambah anggota.' });
+      }
+      res.json({ success: true, message: 'Anggota berhasil ditambahkan!', id: this.lastID });
+    }
+  );
+});
+
+// ==================== ENDPOINT TRANSAKSI KAS ====================
+
+// Ambil Semua Transaksi Kas
+app.get('/api/transactions', (req, res) => {
+  db.all(`SELECT * FROM transactions ORDER BY id DESC`, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: 'Gagal mengambil data transaksi.' });
+    }
+    res.json({ success: true, data: rows });
+  });
+});
+
+// Tambah Transaksi Kas (Masuk / Keluar)
+app.post('/api/transactions', (req, res) => {
+  const { tanggal, jenis, keterangan, jumlah, kategori_kas } = req.body;
+  
+  db.run(
+    `INSERT INTO transactions (tanggal, jenis, keterangan, jumlah, kategori_kas) VALUES (?, ?, ?, ?, ?)`,
+    [tanggal, jenis, keterangan, jumlah, kategori_kas],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ success: false, message: 'Gagal mencatat transaksi.' });
+      }
+      res.json({ success: true, message: 'Transaksi berhasil disimpan!', id: this.lastID });
     }
   );
 });
