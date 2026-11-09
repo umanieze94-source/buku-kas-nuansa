@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// Rute utama untuk menampilkan index.html
+// Rute utama untuk menampilkan halaman web
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -26,20 +26,29 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
   }
 });
 
-// Skema & Data Awal (Seeder Otomatis)
+// Skema Tabel & Seeder Otomatis
 function initDatabase() {
   db.serialize(() => {
-    // Tabel Users
+    // Tabel Users (Admin & User umum)
     db.run(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL,
+      role TEXT NOT NULL, -- SUPER_ADMIN, ADMIN, LEADER, NASABAH
       nama TEXT NOT NULL,
       must_change_password INTEGER DEFAULT 1
     )`);
 
-    // Tabel Anggota / Nasabah (Contoh tambahan tabel data warga)
+    // Tabel Leader & Menyimpan Kode OTP Terakhir
+    db.run(`CREATE TABLE IF NOT EXISTS leaders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nama TEXT NOT NULL,
+      jabatan TEXT NOT NULL,
+      no_hp TEXT UNIQUE NOT NULL,
+      pin_otp TEXT
+    )`);
+
+    // Tabel Data Nasabah / Warga
     db.run(`CREATE TABLE IF NOT EXISTS members (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nik TEXT,
@@ -49,14 +58,53 @@ function initDatabase() {
       kategori TEXT
     )`);
 
-    // Tabel Transaksi Kas
-    db.run(`CREATE TABLE IF NOT EXISTS transactions (
+    // Tabel Modul Khusus: Kas Gang
+    db.run(`CREATE TABLE IF NOT EXISTS kas_gang (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
-      jenis TEXT NOT NULL,
+      uraian TEXT,
+      masuk REAL DEFAULT 0,
+      keluar REAL DEFAULT 0,
+      input_oleh TEXT
+    )`);
+
+    // Tabel Modul Khusus: Cor Jalan
+    db.run(`CREATE TABLE IF NOT EXISTS cor_jalan (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      uraian TEXT,
+      masuk REAL DEFAULT 0,
+      keluar REAL DEFAULT 0,
+      input_oleh TEXT
+    )`);
+
+    // Tabel Modul Khusus: Jimpitan
+    db.run(`CREATE TABLE IF NOT EXISTS jimpitan (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      nama_warga TEXT,
+      nominal REAL DEFAULT 0,
       keterangan TEXT,
-      jumlah REAL NOT NULL,
-      kategori_kas TEXT
+      input_oleh TEXT
+    )`);
+
+    // Tabel Modul Khusus: Ibu-Ibu
+    db.run(`CREATE TABLE IF NOT EXISTS ibu_ibu (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      uraian TEXT,
+      masuk REAL DEFAULT 0,
+      keluar REAL DEFAULT 0,
+      input_oleh TEXT
+    )`);
+
+    // Tabel Tunggakan (Hanya Admin yang bisa edit/tambah, Leader & Nasabah lihat)
+    db.run(`CREATE TABLE IF NOT EXISTS tunggakan (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nama_nasabah TEXT NOT NULL,
+      jenis_iuran TEXT,
+      jumlah_tunggakan REAL NOT NULL,
+      status TEXT DEFAULT 'Belum Lunas'
     )`);
 
     // Masukkan Super Admin Default
@@ -65,12 +113,7 @@ function initDatabase() {
         const hashedPassword = await bcrypt.hash('admin123', 10);
         db.run(
           `INSERT INTO users (username, password, role, nama, must_change_password) VALUES (?, ?, ?, ?, ?)`,
-          ['admin', hashedPassword, 'SUPER_ADMIN', 'Super Admin RT/RW', 1],
-          (err) => {
-            if (!err) {
-              console.log('Akun Super Admin Default Berhasil Dibuat!');
-            }
-          }
+          ['admin', hashedPassword, 'SUPER_ADMIN', 'Super Admin RT/RW', 1]
         );
       }
     });
@@ -79,121 +122,208 @@ function initDatabase() {
 
 // ==================== ENDPOINT AUTHENTICATION ====================
 
-// Endpoint Login
+// Login Standar (Admin / User)
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: 'Username dan Password wajib diisi!' });
-  }
-
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server.' });
-    }
-
-    if (!user) {
+    if (err || !user) {
       return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
     }
-
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
     }
+    res.json({ success: true, user: { id: user.id, username: user.username, nama: user.nama, role: user.role } });
+  });
+});
 
-    res.json({
-      success: true,
-      message: 'Login Berhasil',
-      user: {
-        id: user.id,
-        username: user.username,
-        nama: user.nama,
-        role: user.role,
-        mustChangePassword: Boolean(user.must_change_password)
-      }
+// Request OTP untuk Leader Berdasarkan Nomor HP
+app.post('/api/leader/request-otp', (req, res) => {
+  const { no_hp } = req.body;
+  db.get(`SELECT * FROM leaders WHERE no_hp = ?`, [no_hp], (err, leader) => {
+    if (err || !leader) {
+      return res.status(404).json({ success: false, message: 'Nomor HP Leader tidak terdaftar!' });
+    }
+    
+    // Buat Kode OTP 4 Digit Random
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    
+    db.run(`UPDATE leaders SET pin_otp = ? WHERE no_hp = ?`, [otp, no_hp], (err) => {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal memproses OTP.' });
+      
+      // Simulasi pengiriman OTP (Di dunia nyata bisa diintegrasikan dengan Fonnte/WhatsApp API)
+      console.log(`[SIMULASI KIRIM OTP] Ke Nomor ${no_hp}: KODE OTP ANDA ADALAH ${otp}`);
+      
+      res.json({ 
+        success: true, 
+        message: 'Kode OTP berhasil dikirim! (Cek console server untuk simulasi kode)',
+        dev_otp: otp // Ditampilkan untuk mempermudah pengujian Anda saat ini
+      });
     });
   });
 });
 
-// Endpoint Ganti Password
-app.post('/api/change-password', async (req, res) => {
-  const { username, newPassword } = req.body;
-
-  if (!username || !newPassword) {
-    return res.status(400).json({ success: false, message: 'Data tidak lengkap!' });
-  }
-
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-  db.run(
-    `UPDATE users SET password = ?, must_change_password = 0 WHERE username = ?`,
-    [hashedPassword, username],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Gagal memperbarui password.' });
-      }
-      res.json({ success: true, message: 'Password berhasil diperbarui!' });
+// Verifikasi OTP Login Leader
+app.post('/api/leader/verify-otp', (req, res) => {
+  const { no_hp, otp } = req.body;
+  db.get(`SELECT * FROM leaders WHERE no_hp = ? AND pin_otp = ?`, [no_hp, otp], (err, leader) => {
+    if (err || !leader) {
+      return res.status(400).json({ success: false, message: 'Kode OTP Salah atau Kadaluarsa!' });
     }
-  );
+    // Hapus OTP setelah sukses digunakan
+    db.run(`UPDATE leaders SET pin_otp = NULL WHERE no_hp = ?`, [no_hp]);
+    res.json({ 
+      success: true, 
+      message: 'Login OTP Berhasil!', 
+      user: { id: leader.id, nama: leader.nama, jabatan: leader.jabatan, role: 'LEADER' } 
+    });
+  });
 });
 
-// ==================== ENDPOINT DATA ANGGOTA / NASABAH ====================
 
-// Ambil Semua Data Anggota
+// ==================== ENDPOINT DATA LEADER (Admin Full Akses) ====================
+
+app.get('/api/leaders', (req, res) => {
+  db.all(`SELECT * FROM leaders`, [], (err, rows) => {
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.post('/api/leaders', (req, res) => {
+  const { nama, jabatan, no_hp } = req.body;
+  db.run(`INSERT INTO leaders (nama, jabatan, no_hp) VALUES (?, ?, ?)`, [nama, jabatan, no_hp], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah leader (Nomor HP mungkin sudah terdaftar).' });
+    res.json({ success: true, message: 'Leader berhasil ditambahkan!' });
+  });
+});
+
+app.put('/api/leaders/:id', (req, res) => {
+  const { nama, jabatan, no_hp } = req.body;
+  db.run(`UPDATE leaders SET nama = ?, jabatan = ?, no_hp = ? WHERE id = ?`, [nama, jabatan, no_hp, req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal memperbarui leader.' });
+    res.json({ success: true, message: 'Data leader berhasil diperbarui!' });
+  });
+});
+
+app.delete('/api/leaders/:id', (req, res) => {
+  db.run(`DELETE FROM leaders WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus leader.' });
+    res.json({ success: true, message: 'Leader berhasil dihapus!' });
+  });
+});
+
+
+// ==================== ENDPOINT NASABAH (Admin & Leader Bisa Ubah Kapanpun) ====================
+
 app.get('/api/members', (req, res) => {
   db.all(`SELECT * FROM members`, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Gagal mengambil data anggota.' });
-    }
     res.json({ success: true, data: rows });
   });
 });
 
-// Tambah Anggota Baru
 app.post('/api/members', (req, res) => {
   const { nik, nama, alamat, no_hp, kategori } = req.body;
-  if (!nama) {
-    return res.status(400).json({ success: false, message: 'Nama wajib diisi!' });
-  }
-
-  db.run(
-    `INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`,
-    [nik, nama, alamat, no_hp, kategori],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Gagal menambah anggota.' });
-      }
-      res.json({ success: true, message: 'Anggota berhasil ditambahkan!', id: this.lastID });
-    }
-  );
+  db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah nasabah.' });
+    res.json({ success: true, message: 'Nasabah berhasil ditambahkan!' });
+  });
 });
 
-// ==================== ENDPOINT TRANSAKSI KAS ====================
+app.put('/api/members/:id', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  db.run(`UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ? WHERE id = ?`, [nik, nama, alamat, no_hp, kategori, req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal mengubah nasabah.' });
+    res.json({ success: true, message: 'Data nasabah berhasil diperbarui!' });
+  });
+});
 
-// Ambil Semua Transaksi Kas
-app.get('/api/transactions', (req, res) => {
-  db.all(`SELECT * FROM transactions ORDER BY id DESC`, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Gagal mengambil data transaksi.' });
-    }
+app.delete('/api/members/:id', (req, res) => {
+  db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus nasabah.' });
+    res.json({ success: true, message: 'Data nasabah berhasil dihapus!' });
+  });
+});
+
+
+// ==================== ENDPOINT MODUL KAS GANG, COR, JIMPITAN, IBU-IBU ====================
+// Fungsi umum untuk membuat template endpoint modul inputan Leader dan Edit Admin
+
+function setupModuleEndpoints(routeName, tableName) {
+  // Ambil Data
+  app.get(`/api/${routeName}`, (req, res) => {
+    db.all(`SELECT * FROM ${tableName} ORDER BY id DESC`, [], (err, rows) => {
+      res.json({ success: true, data: rows });
+    });
+  });
+
+  // Leader / Admin Input Data Baru
+  app.post(`/api/${routeName}`, (req, res) => {
+    const fields = Object.keys(req.body);
+    const values = Object.values(req.body);
+    const placeholders = fields.map(() => '?').join(', ');
+    
+    db.run(`INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${placeholders})`, values, function(err) {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan data.' });
+      res.json({ success: true, message: 'Data berhasil disimpan!' });
+    });
+  });
+
+  // Admin Edit Data (Atau Leader yang berhak)
+  app.put(`/api/${routeName}/:id`, (req, res) => {
+    const updates = Object.keys(req.body).map(key => `${key} = ?`).join(', ');
+    const values = [...Object.values(req.body), req.params.id];
+    
+    db.run(`UPDATE ${tableName} SET ${updates} WHERE id = ?`, values, function(err) {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal memperbarui data.' });
+      res.json({ success: true, message: 'Data berhasil diperbarui oleh Admin!' });
+    });
+  });
+
+  // Hanya Admin yang Bisa Hapus
+  app.delete(`/api/${routeName}/:id`, (req, res) => {
+    db.run(`DELETE FROM ${tableName} WHERE id = ?`, [req.params.id], function(err) {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus data.' });
+      res.json({ success: true, message: 'Data berhasil dihapus!' });
+    });
+  });
+}
+
+// Terapkan ke masing-masing modul
+setupModuleEndpoints('kas-gang', 'kas_gang');
+setupModuleEndpoints('cor-jalan', 'cor_jalan');
+setupModuleEndpoints('jimpitan', 'jimpitan');
+setupModuleEndpoints('ibu-ibu', 'ibu_ibu');
+
+
+// ==================== ENDPOINT TUNGGAKAN (Hanya Admin Edit, Lainnya Lihat) ====================
+
+app.get('/api/tunggakan', (req, res) => {
+  db.all(`SELECT * FROM tunggakan`, [], (err, rows) => {
     res.json({ success: true, data: rows });
   });
 });
 
-// Tambah Transaksi Kas (Masuk / Keluar)
-app.post('/api/transactions', (req, res) => {
-  const { tanggal, jenis, keterangan, jumlah, kategori_kas } = req.body;
-  
-  db.run(
-    `INSERT INTO transactions (tanggal, jenis, keterangan, jumlah, kategori_kas) VALUES (?, ?, ?, ?, ?)`,
-    [tanggal, jenis, keterangan, jumlah, kategori_kas],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Gagal mencatat transaksi.' });
-      }
-      res.json({ success: true, message: 'Transaksi berhasil disimpan!', id: this.lastID });
-    }
-  );
+app.post('/api/tunggakan', (req, res) => {
+  const { nama_nasabah, jenis_iuran, jumlah_tunggakan, status } = req.body;
+  db.run(`INSERT INTO tunggakan (nama_nasabah, jenis_iuran, jumlah_tunggakan, status) VALUES (?, ?, ?, ?)`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah data tunggakan.' });
+    res.json({ success: true, message: 'Tunggakan berhasil dicatat!' });
+  });
+});
+
+app.put('/api/tunggakan/:id', (req, res) => {
+  const { nama_nasabah, jenis_iuran, jumlah_tunggakan, status } = req.body;
+  db.run(`UPDATE tunggakan SET nama_nasabah = ?, jenis_iuran = ?, jumlah_tunggakan = ?, status = ? WHERE id = ?`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status, req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal mengubah tunggakan.' });
+    res.json({ success: true, message: 'Data tunggakan berhasil diperbarui Admin!' });
+  });
+});
+
+app.delete('/api/tunggakan/:id', (req, res) => {
+  db.run(`DELETE FROM tunggakan WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus tunggakan.' });
+    res.json({ success: true, message: 'Tunggakan dihapus.' });
+  });
 });
 
 // Jalankan Server
