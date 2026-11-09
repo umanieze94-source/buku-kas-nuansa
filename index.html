@@ -13,11 +13,18 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
 
     function App() {
+      // Auth States
+      const [loginMode, setLoginMode] = useState('ADMIN'); // 'ADMIN' or 'LEADER_OTP'
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
+      const [noHpLeader, setNoHpLeader] = useState('');
+      const [otpCode, setOtpCode] = useState('');
+      const [otpSent, setOtpSent] = useState(false);
+      const [devOtpMsg, setDevOtpMsg] = useState('');
+
       const [newPassword, setNewPassword] = useState('');
       const [isMustChangePass, setIsMustChangePass] = useState(false);
       const [loggedInUser, setLoggedInUser] = useState(null);
@@ -25,23 +32,87 @@
       const [successMsg, setSuccessMsg] = useState('');
       const [activeMenu, setActiveMenu] = useState('Dashboard');
 
-      const handleLogin = async (e) => {
-        e.preventDefault();
-        setErrorMsg('');
-        setSuccessMsg('');
+      // Data States
+      const [dashboardData, setDashboardData] = useState({
+        judul: 'Ringkasan Aktivitas Keuangan Real-Time',
+        deskripsi: 'Sistem berjalan normal secara online di cloud Railway.',
+        kasGang: 4500000,
+        corJalan: 12800000,
+        jimpitan: 17500000,
+        ibuIbu: 3200000
+      });
+      const [isEditingDashboard, setIsEditingDashboard] = useState(false);
 
+      const [leaders, setLeaders] = useState([]);
+      const [members, setMembers] = useState([]);
+      const [kasGangList, setKasGangList] = useState([]);
+      const [corJalanList, setCorJalanList] = useState([]);
+      const [jimpitanList, setJimpitanList] = useState([]);
+      const [ibuIbuList, setIbuIbuList] = useState([]);
+      const [tunggakanList, setTunggakanList] = useState([]);
+
+      // Form States
+      const [formLeader, setFormLeader] = useState({ id: null, nama: '', jabatan: '', no_hp: '' });
+      const [formMember, setFormMember] = useState({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
+      const [formKas, setFormKas] = useState({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
+      const [formJimpitan, setFormJimpitan] = useState({ id: null, tanggal: '', nama_warga: '', nominal: 0, keterangan: '' });
+      const [formTunggakan, setFormTunggakan] = useState({ id: null, nama_nasabah: '', jenis_iuran: 'Kas Gang', jumlah_tunggakan: 0, status: 'Belum Lunas' });
+
+      // Fetch Data Saat Menu Berubah
+      useEffect(() => {
+        if (loggedInUser) {
+          fetchData(activeMenu);
+        }
+      }, [activeMenu, loggedInUser]);
+
+      const fetchData = async (menu) => {
         try {
-          const response = await fetch('/api/login', {
+          if (menu === 'Data Leader') {
+            const res = await fetch('/api/leaders');
+            const d = await res.json();
+            if (d.success) setLeaders(d.data);
+          } else if (menu === 'Data Nasabah') {
+            const res = await fetch('/api/members');
+            const d = await res.json();
+            if (d.success) setMembers(d.data);
+          } else if (menu === 'Kas Gang') {
+            const res = await fetch('/api/kas-gang');
+            const d = await res.json();
+            if (d.success) setKasGangList(d.data);
+          } else if (menu === 'Cor Jalan') {
+            const res = await fetch('/api/cor-jalan');
+            const d = await res.json();
+            if (d.success) setCorJalanList(d.data);
+          } else if (menu === 'Jimpitan') {
+            const res = await fetch('/api/jimpitan');
+            const d = await res.json();
+            if (d.success) setJimpitanList(d.data);
+          } else if (menu === 'Ibu-Ibu') {
+            const res = await fetch('/api/ibu-ibu');
+            const d = await res.json();
+            if (d.success) setIbuIbuList(d.data);
+          } else if (menu === 'Tunggakan') {
+            const res = await fetch('/api/tunggakan');
+            const d = await res.json();
+            if (d.success) setTunggakanList(d.data);
+          }
+        } catch (err) {
+          console.error("Gagal mengambil data:", err);
+        }
+      };
+
+      // Handle Login Admin
+      const handleLoginAdmin = async (e) => {
+        e.preventDefault();
+        setErrorMsg(''); setSuccessMsg('');
+        try {
+          const res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
           });
-          const data = await response.json();
-
-          if (!data.success) {
-            setErrorMsg(data.message);
-            return;
-          }
+          const data = await res.json();
+          if (!data.success) return setErrorMsg(data.message);
 
           if (data.user.mustChangePassword) {
             setIsMustChangePass(true);
@@ -50,34 +121,135 @@
             setLoggedInUser(data.user);
           }
         } catch (err) {
-          setErrorMsg('Gagal terhubung ke server Node.js!');
+          setErrorMsg('Gagal terhubung ke server!');
         }
       };
 
-      const handleChangePassword = async (e) => {
+      // Request OTP Leader
+      const handleRequestOtp = async (e) => {
         e.preventDefault();
-        setErrorMsg('');
-
+        setErrorMsg(''); setSuccessMsg(''); setDevOtpMsg('');
         try {
-          const response = await fetch('/api/change-password', {
+          const res = await fetch('/api/leader/request-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, newPassword })
+            body: JSON.stringify({ no_hp: noHpLeader })
           });
-          const data = await response.json();
+          const data = await res.json();
+          if (!data.success) return setErrorMsg(data.message);
 
-          if (data.success) {
-            alert('Password berhasil diubah! Silakan login ulang dengan password baru.');
-            setIsMustChangePass(false);
-            setPassword('');
-            setNewPassword('');
-          } else {
-            setErrorMsg(data.message);
-          }
+          setOtpSent(true);
+          setSuccessMsg(data.message);
+          if (data.dev_otp) setDevOtpMsg(`[KODE OTP PENGUJIAN]: ${data.dev_otp}`);
         } catch (err) {
-          setErrorMsg('Gagal mengganti password!');
+          setErrorMsg('Gagal mengirim OTP!');
         }
       };
+
+      // Verify OTP Leader
+      const handleVerifyOtp = async (e) => {
+        e.preventDefault();
+        setErrorMsg('');
+        try {
+          const res = await fetch('/api/leader/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ no_hp: noHpLeader, otp: otpCode })
+          });
+          const data = await res.json();
+          if (!data.success) return setErrorMsg(data.message);
+
+          setLoggedInUser(data.user);
+        } catch (err) {
+          setErrorMsg('Verifikasi OTP gagal!');
+        }
+      };
+
+      // Handlers CRUD Leader (Hanya Admin)
+      const handleSaveLeader = async (e) => {
+        e.preventDefault();
+        const url = formLeader.id ? `/api/leaders/${formLeader.id}` : '/api/leaders';
+        const method = formLeader.id ? 'PUT' : 'POST';
+        await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formLeader)
+        });
+        setFormLeader({ id: null, nama: '', jabatan: '', no_hp: '' });
+        fetchData('Data Leader');
+      };
+
+      const handleDeleteLeader = async (id) => {
+        if (confirm('Yakin ingin menghapus leader ini?')) {
+          await fetch(`/api/leaders/${id}`, { method: 'DELETE' });
+          fetchData('Data Leader');
+        }
+      };
+
+      // Handlers CRUD Nasabah (Admin & Leader)
+      const handleSaveMember = async (e) => {
+        e.preventDefault();
+        const url = formMember.id ? `/api/members/${formMember.id}` : '/api/members';
+        const method = formMember.id ? 'PUT' : 'POST';
+        await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formMember)
+        });
+        setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
+        fetchData('Data Nasabah');
+      };
+
+      const handleDeleteMember = async (id) => {
+        if (confirm('Yakin ingin menghapus data nasabah ini?')) {
+          await fetch(`/api/members/${id}`, { method: 'DELETE' });
+          fetchData('Data Nasabah');
+        }
+      };
+
+      // Handlers Generic Modul Kas (Kas Gang, Cor Jalan, Ibu-Ibu)
+      const handleSaveKas = async (e, routeName) => {
+        e.preventDefault();
+        const url = formKas.id ? `/api/${routeName}/${formKas.id}` : `/api/${routeName}`;
+        const method = formKas.id ? 'PUT' : 'POST';
+        await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formKas, input_oleh: loggedInUser.nama })
+        });
+        setFormKas({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
+        fetchData(activeMenu);
+      };
+
+      const handleDeleteKas = async (id, routeName) => {
+        if (confirm('Hapus pencatatan ini?')) {
+          await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' });
+          fetchData(activeMenu);
+        }
+      };
+
+      // Handlers Modul Tunggakan (Hanya Admin Boleh Edit/Tambah)
+      const handleSaveTunggakan = async (e) => {
+        e.preventDefault();
+        const url = formTunggakan.id ? `/api/tunggakan/${formTunggakan.id}` : '/api/tunggakan';
+        const method = formTunggakan.id ? 'PUT' : 'POST';
+        await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formTunggakan)
+        });
+        setFormTunggakan({ id: null, nama_nasabah: '', jenis_iuran: 'Kas Gang', jumlah_tunggakan: 0, status: 'Belum Lunas' });
+        fetchData('Tunggakan');
+      };
+
+      const handleDeleteTunggakan = async (id) => {
+        if (confirm('Hapus data tunggakan ini?')) {
+          await fetch(`/api/tunggakan/${id}`, { method: 'DELETE' });
+          fetchData('Tunggakan');
+        }
+      };
+
+      const isAdmin = loggedInUser?.role === 'SUPER_ADMIN' || loggedInUser?.role === 'ADMIN';
 
       if (loggedInUser) {
         return (
@@ -92,7 +264,7 @@
                 {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Ibu-Ibu', 'Data Nasabah', 'Data Leader', 'Tunggakan', 'Laporan', 'Riwayat Transaksi', 'Audit Log', 'Backup Data', 'Restore Data', 'Pengaturan'].map((menu) => (
                   <button
                     key={menu}
-                    onClick={() => setActiveMenu(menu)}
+                    onClick={() => { setActiveMenu(menu); setIsEditingDashboard(false); }}
                     className={`w-full text-left px-4 py-2.5 rounded-lg transition font-medium ${activeMenu === menu ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800'}`}
                   >
                     {menu}
@@ -114,39 +286,303 @@
               <header className="bg-white shadow-sm h-16 flex items-center justify-between px-8 border-b border-slate-200">
                 <h2 className="text-xl font-bold text-emerald-800">{activeMenu}</h2>
                 <div className="text-sm text-slate-600">
-                  Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role})
+                  Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role || 'LEADER'})
                 </div>
               </header>
 
               <main className="flex-1 overflow-y-auto p-8">
+                {/* DASHBOARD */}
                 {activeMenu === 'Dashboard' && (
                   <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-bold text-slate-700">Ringkasan Keuangan Warga</h3>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => setIsEditingDashboard(!isEditingDashboard)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm transition shadow"
+                        >
+                          {isEditingDashboard ? 'Selesai Edit' : 'Edit Tampilan Dashboard'}
+                        </button>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Kas Gang</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 4.500.000</h3>
+                        {isEditingDashboard ? (
+                          <input 
+                            type="number" 
+                            value={dashboardData.kasGang} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, kasGang: Number(e.target.value) })}
+                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
+                          />
+                        ) : (
+                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.kasGang.toLocaleString('id-ID')}</h3>
+                        )}
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Cor Jalan</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 12.800.000</h3>
+                        {isEditingDashboard ? (
+                          <input 
+                            type="number" 
+                            value={dashboardData.corJalan} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, corJalan: Number(e.target.value) })}
+                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
+                          />
+                        ) : (
+                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.corJalan.toLocaleString('id-ID')}</h3>
+                        )}
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Jimpitan</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 1.750.000</h3>
+                        {isEditingDashboard ? (
+                          <input 
+                            type="number" 
+                            value={dashboardData.jimpitan} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, jimpitan: Number(e.target.value) })}
+                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
+                          />
+                        ) : (
+                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.jimpitan.toLocaleString('id-ID')}</h3>
+                        )}
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Ibu-Ibu</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 3.200.000</h3>
+                        {isEditingDashboard ? (
+                          <input 
+                            type="number" 
+                            value={dashboardData.ibuIbu} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, ibuIbu: Number(e.target.value) })}
+                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
+                          />
+                        ) : (
+                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.ibuIbu.toLocaleString('id-ID')}</h3>
+                        )}
                       </div>
                     </div>
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-700 mb-4">Ringkasan Aktivitas Keuangan Real-Time</h3>
-                      <p className="text-slate-600 text-sm">Sistem berjalan normal secara lokal di komputer Anda. Silakan pilih menu di sebelah kiri untuk mengelola data nasabah, transaksi, maupun laporan keuangan warga Nuansa16A.</p>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm space-y-3">
+                      {isEditingDashboard ? (
+                        <div className="space-y-3">
+                          <input 
+                            type="text" 
+                            value={dashboardData.judul} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, judul: e.target.value })}
+                            className="w-full border rounded p-2 font-bold text-lg"
+                          />
+                          <textarea 
+                            value={dashboardData.deskripsi} 
+                            onChange={(e) => setDashboardData({ ...dashboardData, deskripsi: e.target.value })}
+                            className="w-full border rounded p-2 text-sm"
+                            rows="3"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="text-lg font-bold text-slate-700">{dashboardData.judul}</h3>
+                          <p className="text-slate-600 text-sm">{dashboardData.deskripsi}</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {activeMenu !== 'Dashboard' && (
+                {/* DATA LEADER (Hapus & Edit oleh Admin) */}
+                {activeMenu === 'Data Leader' && (
+                  <div className="space-y-6">
+                    {isAdmin && (
+                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4">{formLeader.id ? 'Edit Data Leader' : 'Tambah Leader Baru'}</h3>
+                        <form onSubmit={handleSaveLeader} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <input type="text" placeholder="Nama Leader" value={formLeader.nama} onChange={e => setFormLeader({ ...formLeader, nama: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Jabatan (cth: Leader Kas Gang)" value={formLeader.jabatan} onChange={e => setFormLeader({ ...formLeader, jabatan: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Nomor HP (untuk OTP)" value={formLeader.no_hp} onChange={e => setFormLeader({ ...formLeader, no_hp: e.target.value })} className="border p-2 rounded" required />
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formLeader.id ? 'Perbarui' : 'Tambah'}</button>
+                        </form>
+                      </div>
+                    )}
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-slate-50">
+                            <th className="p-3">Nama</th>
+                            <th className="p-3">Jabatan</th>
+                            <th className="p-3">Nomor HP</th>
+                            {isAdmin && <th className="p-3 text-right">Aksi</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leaders.map(l => (
+                            <tr key={l.id} className="border-b hover:bg-slate-50">
+                              <td className="p-3 font-medium">{l.nama}</td>
+                              <td className="p-3">{l.jabatan}</td>
+                              <td className="p-3">{l.no_hp}</td>
+                              {isAdmin && (
+                                <td className="p-3 text-right space-x-2">
+                                  <button onClick={() => setFormLeader(l)} className="text-amber-600 font-semibold hover:underline">Edit</button>
+                                  <button onClick={() => handleDeleteLeader(l.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* DATA NASABAH (Admin & Leader Bisa Ubah Kapanpun) */}
+                {activeMenu === 'Data Nasabah' && (
+                  <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Nasabah' : 'Tambah Nasabah Baru'}</h3>
+                      <form onSubmit={handleSaveMember} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <input type="text" placeholder="NIK" value={formMember.nik} onChange={e => setFormMember({ ...formMember, nik: e.target.value })} className="border p-2 rounded" />
+                        <input type="text" placeholder="Nama Lengkap" value={formMember.nama} onChange={e => setFormMember({ ...formMember, nama: e.target.value })} className="border p-2 rounded" required />
+                        <input type="text" placeholder="Alamat / Blok Rumah" value={formMember.alamat} onChange={e => setFormMember({ ...formMember, alamat: e.target.value })} className="border p-2 rounded" />
+                        <input type="text" placeholder="Nomor HP" value={formMember.no_hp} onChange={e => setFormMember({ ...formMember, no_hp: e.target.value })} className="border p-2 rounded" />
+                        <select value={formMember.kategori} onChange={e => setFormMember({ ...formMember, kategori: e.target.value })} className="border p-2 rounded">
+                          <option value="Warga Tetap">Warga Tetap</option>
+                          <option value="Warga Kontrak">Warga Kontrak</option>
+                        </select>
+                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formMember.id ? 'Simpan Perubahan' : 'Simpan Data'}</button>
+                      </form>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-slate-50">
+                            <th className="p-3">Nama</th>
+                            <th className="p-3">NIK</th>
+                            <th className="p-3">Alamat</th>
+                            <th className="p-3">No HP</th>
+                            <th className="p-3">Kategori</th>
+                            <th className="p-3 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {members.map(m => (
+                            <tr key={m.id} className="border-b hover:bg-slate-50">
+                              <td className="p-3 font-medium">{m.nama}</td>
+                              <td className="p-3">{m.nik || '-'}</td>
+                              <td className="p-3">{m.alamat}</td>
+                              <td className="p-3">{m.no_hp}</td>
+                              <td className="p-3">{m.kategori}</td>
+                              <td className="p-3 text-right space-x-2">
+                                <button onClick={() => setFormMember(m)} className="text-amber-600 font-semibold hover:underline">Edit</button>
+                                {isAdmin && <button onClick={() => handleDeleteMember(m.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODUL KAS (Kas Gang, Cor Jalan, Ibu-Ibu) */}
+                {['Kas Gang', 'Cor Jalan', 'Ibu-Ibu'].includes(activeMenu) && (
+                  <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <h3 className="font-bold text-slate-700 mb-4">{formKas.id ? `Edit Data ${activeMenu}` : `Input Transaksi ${activeMenu}`}</h3>
+                      <form onSubmit={(e) => handleSaveKas(e, activeMenu.toLowerCase().replace(' ', '-'))} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <input type="date" value={formKas.tanggal} onChange={e => setFormKas({ ...formKas, tanggal: e.target.value })} className="border p-2 rounded" required />
+                        <input type="text" placeholder="Uraian Transaksi" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
+                        <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
+                        <input type="number" placeholder="Keluar (Rp)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
+                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formKas.id ? 'Update Admin' : 'Input Leader'}</button>
+                      </form>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-slate-50">
+                            <th className="p-3">Tanggal</th>
+                            <th className="p-3">Uraian</th>
+                            <th className="p-3 text-emerald-600">Masuk</th>
+                            <th className="p-3 text-rose-600">Keluar</th>
+                            <th className="p-3">Input Oleh</th>
+                            <th className="p-3 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(activeMenu === 'Kas Gang' ? kasGangList : activeMenu === 'Cor Jalan' ? corJalanList : ibuIbuList).map(item => (
+                            <tr key={item.id} className="border-b hover:bg-slate-50">
+                              <td className="p-3">{item.tanggal}</td>
+                              <td className="p-3 font-medium">{item.uraian}</td>
+                              <td className="p-3 text-emerald-600">Rp {(item.masuk || 0).toLocaleString('id-ID')}</td>
+                              <td className="p-3 text-rose-600">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
+                              <td className="p-3 text-slate-500">{item.input_oleh || 'Leader'}</td>
+                              <td className="p-3 text-right space-x-2">
+                                {isAdmin ? (
+                                  <>
+                                    <button onClick={() => setFormKas(item)} className="text-amber-600 font-semibold hover:underline">Edit Admin</button>
+                                    <button onClick={() => handleDeleteKas(item.id, activeMenu.toLowerCase().replace(' ', '-'))} className="text-rose-600 font-semibold hover:underline">Hapus</button>
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-slate-400">Hanya Admin Boleh Edit</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODUL TUNGGAKAN (Leader & Nasabah Hanya Lihat, Admin Edit) */}
+                {activeMenu === 'Tunggakan' && (
+                  <div className="space-y-6">
+                    {isAdmin && (
+                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4">{formTunggakan.id ? 'Edit Data Tunggakan' : 'Catat Tunggakan Baru'}</h3>
+                        <form onSubmit={handleSaveTunggakan} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <input type="text" placeholder="Nama Nasabah / Warga" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Jenis Iuran" value={formTunggakan.jenis_iuran} onChange={e => setFormTunggakan({ ...formTunggakan, jenis_iuran: e.target.value })} className="border p-2 rounded" required />
+                          <input type="number" placeholder="Nominal Tunggakan" value={formTunggakan.jumlah_tunggakan} onChange={e => setFormTunggakan({ ...formTunggakan, jumlah_tunggakan: Number(e.target.value) })} className="border p-2 rounded" required />
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formTunggakan.id ? 'Perbarui' : 'Simpan'}</button>
+                        </form>
+                      </div>
+                    )}
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-slate-50">
+                            <th className="p-3">Nama Nasabah</th>
+                            <th className="p-3">Jenis Iuran</th>
+                            <th className="p-3 text-rose-600">Jumlah Tunggakan</th>
+                            <th className="p-3">Status</th>
+                            {isAdmin && <th className="p-3 text-right">Aksi</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tunggakanList.map(t => (
+                            <tr key={t.id} className="border-b hover:bg-slate-50">
+                              <td className="p-3 font-medium">{t.nama_nasabah}</td>
+                              <td className="p-3">{t.jenis_iuran}</td>
+                              <td className="p-3 font-bold text-rose-600">Rp {(t.jumlah_tunggakan || 0).toLocaleString('id-ID')}</td>
+                              <td className="p-3"><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs">{t.status}</span></td>
+                              {isAdmin && (
+                                <td className="p-3 text-right space-x-2">
+                                  <button onClick={() => setFormTunggakan(t)} className="text-amber-600 font-semibold hover:underline">Edit</button>
+                                  <button onClick={() => handleDeleteTunggakan(t.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* MENU LAINNYA */}
+                {!['Dashboard', 'Data Leader', 'Data Nasabah', 'Kas Gang', 'Cor Jalan', 'Ibu-Ibu', 'Tunggakan'].includes(activeMenu) && (
                   <div className="bg-white p-6 rounded-xl shadow-sm">
                     <h3 className="text-lg font-bold text-slate-700 mb-2">Halaman {activeMenu}</h3>
                     <p className="text-slate-600 text-sm">Modul dan pengaturan untuk <strong>{activeMenu}</strong> siap digunakan.</p>
@@ -158,77 +594,73 @@
         );
       }
 
+      // HALAMAN LOGIN & OTP
       return (
         <div className="min-h-screen flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
             <div className="bg-emerald-700 p-6 text-white text-center">
               <h2 className="text-xl font-bold tracking-wide">BUKU KAS & TABUNGAN WARGA</h2>
               <p className="text-emerald-100 text-sm mt-1">NUANSA16A C3/C8</p>
+
+              {/* Tab Switch Login */}
+              <div className="flex bg-emerald-800 rounded-lg p-1 mt-4 text-xs font-semibold">
+                <button 
+                  onClick={() => { setLoginMode('ADMIN'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className={`flex-1 py-1.5 rounded-md ${loginMode === 'ADMIN' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}
+                >
+                  Login Admin
+                </button>
+                <button 
+                  onClick={() => { setLoginMode('LEADER_OTP'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className={`flex-1 py-1.5 rounded-md ${loginMode === 'LEADER_OTP' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}
+                >
+                  Login Leader (OTP)
+                </button>
+              </div>
             </div>
 
             <div className="p-6">
-              {errorMsg && (
-                <div className="mb-4 bg-rose-100 border border-rose-300 text-rose-700 px-4 py-3 rounded-lg text-sm">
-                  {errorMsg}
-                </div>
-              )}
-              {successMsg && (
-                <div className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">
-                  {successMsg}
-                </div>
+              {errorMsg && <div className="mb-4 bg-rose-100 border border-rose-300 text-rose-700 px-4 py-3 rounded-lg text-sm">{errorMsg}</div>}
+              {successMsg && <div className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">{successMsg}</div>}
+              {devOtpMsg && <div className="mb-4 bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-lg text-xs font-mono">{devOtpMsg}</div>}
+
+              {/* FORM LOGIN ADMIN */}
+              {loginMode === 'ADMIN' && (
+                <form onSubmit={handleLoginAdmin} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Username Admin</label>
+                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="admin" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="admin123" required />
+                  </div>
+                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Masuk Admin</button>
+                </form>
               )}
 
-              {!isMustChangePass ? (
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Pengguna (Username)</label>
-                    <input 
-                      type="text" 
-                      value={username} 
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="admin" 
-                      required 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Sandi (Password)</label>
-                    <input 
-                      type="password" 
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="admin123" 
-                      required 
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow-md transition"
-                  >
-                    Masuk
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleChangePassword} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Sandi Baru</label>
-                    <input 
-                      type="password" 
-                      value={newPassword} 
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="Masukkan password baru" 
-                      required 
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-lg shadow-md transition"
-                  >
-                    Simpan Password Baru
-                  </button>
-                </form>
+              {/* FORM LOGIN LEADER VIA OTP */}
+              {loginMode === 'LEADER_OTP' && (
+                <div className="space-y-4">
+                  {!otpSent ? (
+                    <form onSubmit={handleRequestOtp} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nomor HP Leader</label>
+                        <input type="text" value={noHpLeader} onChange={(e) => setNoHpLeader(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="08123456789" required />
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Minta Kode OTP</button>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleVerifyOtp} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Masukkan Kode OTP 4 Digit</label>
+                        <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} className="w-full px-4 py-2 border text-center font-mono text-xl tracking-widest rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="1234" maxLength="4" required />
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Verifikasi & Masuk</button>
+                      <button type="button" onClick={() => setOtpSent(false)} className="w-full text-xs text-slate-500 hover:underline">Ganti Nomor HP</button>
+                    </form>
+                  )}
+                </div>
               )}
             </div>
           </div>
