@@ -11,6 +11,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Rute eksplisit untuk menangani halaman utama (Root '/')
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Inisialisasi Database SQLite
 const db = new sqlite3.Database('./database.sqlite', (err) => {
   if (err) {
@@ -96,7 +101,7 @@ app.post('/api/change-password', async (req, res) => {
   const { username, newPassword } = req.body;
 
   if (!username || !newPassword) {
-    return res.status(400).json({ success: false, message: 'Data tidak lengkap!' });
+    return res.status(0).json({ success: false, message: 'Data tidak lengkap!' });
   }
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
