@@ -16,67 +16,60 @@
     const { useState, useEffect } = React;
 
     function App() {
-      // Auth States
-      const [loginMode, setLoginMode] = useState('ADMIN'); 
+      const [loginMode, setLoginMode] = useState('ADMIN'); // 'ADMIN', 'LEADER_OTP', 'WARGA_OTP'
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
       const [noHpLeader, setNoHpLeader] = useState('');
+      const [noHpWarga, setNoHpWarga] = useState('');
       const [otpCode, setOtpCode] = useState('');
       const [otpSent, setOtpSent] = useState(false);
       const [devOtpMsg, setDevOtpMsg] = useState('');
 
-      const [newPassword, setNewPassword] = useState('');
-      const [isMustChangePass, setIsMustChangePass] = useState(false);
       const [loggedInUser, setLoggedInUser] = useState(null);
       const [errorMsg, setErrorMsg] = useState('');
       const [successMsg, setSuccessMsg] = useState('');
       const [activeMenu, setActiveMenu] = useState('Dashboard');
 
-      // Data States
       const [dashboardMeta, setDashboardMeta] = useState({
         judul: 'Ringkasan Aktivitas Keuangan Real-Time',
-        deskripsi: 'Sistem berjalan otomatis dan terintegrasi secara online di cloud Railway.'
+        deskripsi: 'Sistem otomatis terintegrasi dengan pencatatan iuran warga dan kas gang.'
       });
       const [isEditingDashboard, setIsEditingDashboard] = useState(false);
 
       const [leaders, setLeaders] = useState([]);
       const [members, setMembers] = useState([]);
+      const [iuranList, setIuranList] = useState([]);
       const [kasGangList, setKasGangList] = useState([]);
       const [corJalanList, setCorJalanList] = useState([]);
       const [jimpitanList, setJimpitanList] = useState([]);
       const [ibuIbuList, setIbuIbuList] = useState([]);
       const [tunggakanList, setTunggakanList] = useState([]);
 
-      // Form States
       const [formLeader, setFormLeader] = useState({ id: null, nama: '', jabatan: '', no_hp: '' });
       const [formMember, setFormMember] = useState({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
+      const [formIuran, setFormIuran] = useState({ warga_id: '', bulan: 'Januari', tahun: '2026', nominal: 0, keterangan: 'Iuran Bulanan' });
       const [formKas, setFormKas] = useState({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
-      const [formJimpitan, setFormJimpitan] = useState({ id: null, tanggal: '', nama_warga: '', nominal: 0, keterangan: '' });
       const [formTunggakan, setFormTunggakan] = useState({ id: null, nama_nasabah: '', jenis_iuran: 'Kas Gang', jumlah_tunggakan: 0, status: 'Belum Lunas' });
 
-      // Fetch Semua Data Saat Login atau Menu Berubah agar Dashboard selalu akurat
       useEffect(() => {
-        if (loggedInUser) {
-          fetchAllData();
-        }
+        if (loggedInUser) fetchAllData();
       }, [loggedInUser]);
 
       useEffect(() => {
-        if (loggedInUser) {
-          fetchData(activeMenu);
-        }
+        if (loggedInUser) fetchData(activeMenu);
       }, [activeMenu]);
 
       const fetchAllData = async () => {
         try {
-          const [resKas, resCor, resJim, resIbu, resMem, resLead, resTung] = await Promise.all([
+          const [resKas, resCor, resJim, resIbu, resMem, resLead, resTung, resIur] = await Promise.all([
             fetch('/api/kas-gang').then(res => res.json()),
             fetch('/api/cor-jalan').then(res => res.json()),
             fetch('/api/jimpitan').then(res => res.json()),
             fetch('/api/ibu-ibu').then(res => res.json()),
             fetch('/api/members').then(res => res.json()),
             fetch('/api/leaders').then(res => res.json()),
-            fetch('/api/tunggakan').then(res => res.json())
+            fetch('/api/tunggakan').then(res => res.json()),
+            fetch('/api/iuran').then(res => res.json())
           ]);
 
           if (resKas.success) setKasGangList(resKas.data);
@@ -86,48 +79,42 @@
           if (resMem.success) setMembers(resMem.data);
           if (resLead.success) setLeaders(resLead.data);
           if (resTung.success) setTunggakanList(resTung.data);
+          if (resIur.success) setIuranList(resIur.data);
         } catch (err) {
           console.error("Gagal sinkronisasi data:", err);
         }
       };
 
       const fetchData = async (menu) => {
-        try {
-          if (menu === 'Data Pengurus') {
-            const res = await fetch('/api/leaders');
-            const d = await res.json();
-            if (d.success) setLeaders(d.data);
-          } else if (menu === 'Data Warga') {
-            const res = await fetch('/api/members');
-            const d = await res.json();
-            if (d.success) setMembers(d.data);
-          } else if (menu === 'Kas Gang') {
-            const res = await fetch('/api/kas-gang');
-            const d = await res.json();
-            if (d.success) setKasGangList(d.data);
-          } else if (menu === 'Cor Jalan') {
-            const res = await fetch('/api/cor-jalan');
-            const d = await res.json();
-            if (d.success) setCorJalanList(d.data);
-          } else if (menu === 'Jimpitan') {
-            const res = await fetch('/api/jimpitan');
-            const d = await res.json();
-            if (d.success) setJimpitanList(d.data);
-          } else if (menu === 'Keuangan Ibu Ibu') {
-            const res = await fetch('/api/ibu-ibu');
-            const d = await res.json();
-            if (d.success) setIbuIbuList(d.data);
-          } else if (menu === 'Tunggakan') {
-            const res = await fetch('/api/tunggakan');
-            const d = await res.json();
-            if (d.success) setTunggakanList(d.data);
-          }
-        } catch (err) {
-          console.error("Gagal mengambil data:", err);
+        if (menu === 'Data Pengurus') {
+          const res = await fetch('/api/leaders').then(r => r.json());
+          if (res.success) setLeaders(res.data);
+        } else if (menu === 'Data Warga') {
+          const [resMem, resIur] = await Promise.all([
+            fetch('/api/members').then(r => r.json()),
+            fetch('/api/iuran').then(r => r.json())
+          ]);
+          if (resMem.success) setMembers(resMem.data);
+          if (resIur.success) setIuranList(resIur.data);
+        } else if (menu === 'Kas Gang') {
+          const res = await fetch('/api/kas-gang').then(r => r.json());
+          if (res.success) setKasGangList(res.data);
+        } else if (menu === 'Cor Jalan') {
+          const res = await fetch('/api/cor-jalan').then(r => r.json());
+          if (res.success) setCorJalanList(res.data);
+        } else if (menu === 'Jimpitan') {
+          const res = await fetch('/api/jimpitan').then(r => r.json());
+          if (res.success) setJimpitanList(res.data);
+        } else if (menu === 'Keuangan Ibu Ibu') {
+          const res = await fetch('/api/ibu-ibu').then(r => r.json());
+          if (res.success) setIbuIbuList(res.data);
+        } else if (menu === 'Tunggakan') {
+          const res = await fetch('/api/tunggakan').then(r => r.json());
+          if (res.success) setTunggakanList(res.data);
         }
       };
 
-      // Hitung Saldo Otomatis (Total Masuk dikurangi Total Keluar)
+      // Hitung Saldo Otomatis (Masuk dikurangi Keluar)
       const hitungSaldo = (list) => {
         return list.reduce((total, item) => {
           const masuk = Number(item.masuk || item.nominal || 0);
@@ -141,162 +128,119 @@
       const totalJimpitan = hitungSaldo(jimpitanList);
       const totalIbuIbu = hitungSaldo(ibuIbuList);
 
-      // Handle Login Admin
+      // Login Handlers
       const handleLoginAdmin = async (e) => {
         e.preventDefault();
         setErrorMsg(''); setSuccessMsg('');
-        try {
-          const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-          });
-          const data = await res.json();
-          if (!data.success) return setErrorMsg(data.message);
-          setLoggedInUser(data.user);
-        } catch (err) {
-          setErrorMsg('Gagal terhubung ke server!');
-        }
+        const res = await fetch('/api/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        }).then(r => r.json());
+        if (!res.success) return setErrorMsg(res.message);
+        setLoggedInUser(res.user);
       };
 
-      // Request OTP Leader
-      const handleRequestOtp = async (e) => {
+      const handleRequestOtp = async (e, type) => {
         e.preventDefault();
         setErrorMsg(''); setSuccessMsg(''); setDevOtpMsg('');
-        try {
-          const res = await fetch('/api/leader/request-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ no_hp: noHpLeader })
-          });
-          const data = await res.json();
-          if (!data.success) return setErrorMsg(data.message);
+        const endpoint = type === 'LEADER' ? '/api/leader/request-otp' : '/api/warga/request-otp';
+        const noHp = type === 'LEADER' ? noHpLeader : noHpWarga;
 
-          setOtpSent(true);
-          setSuccessMsg(data.message);
-          if (data.dev_otp) setDevOtpMsg(`[KODE OTP PENGUJIAN]: ${data.dev_otp}`);
-        } catch (err) {
-          setErrorMsg('Gagal mengirim OTP!');
-        }
+        const res = await fetch(endpoint, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ no_hp: noHp })
+        }).then(r => r.json());
+
+        if (!res.success) return setErrorMsg(res.message);
+        setOtpSent(true);
+        setSuccessMsg(res.message);
+        if (res.dev_otp) setDevOtpMsg(`[KODE OTP PENGUJIAN]: ${res.dev_otp}`);
       };
 
-      // Verify OTP Leader
-      const handleVerifyOtp = async (e) => {
+      const handleVerifyOtp = async (e, type) => {
         e.preventDefault();
-        setErrorMsg('');
-        try {
-          const res = await fetch('/api/leader/verify-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ no_hp: noHpLeader, otp: otpCode })
-          });
-          const data = await res.json();
-          if (!data.success) return setErrorMsg(data.message);
-          setLoggedInUser(data.user);
-        } catch (err) {
-          setErrorMsg('Verifikasi OTP gagal!');
-        }
+        const endpoint = type === 'LEADER' ? '/api/leader/verify-otp' : '/api/warga/verify-otp';
+        const noHp = type === 'LEADER' ? noHpLeader : noHpWarga;
+
+        const res = await fetch(endpoint, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ no_hp: noHp, otp: otpCode })
+        }).then(r => r.json());
+
+        if (!res.success) return setErrorMsg(res.message);
+        setLoggedInUser(res.user);
       };
 
-      // Handlers CRUD Pengurus
+      // CRUD Pengurus
       const handleSaveLeader = async (e) => {
         e.preventDefault();
         const url = formLeader.id ? `/api/leaders/${formLeader.id}` : '/api/leaders';
-        const method = formLeader.id ? 'PUT' : 'POST';
         await fetch(url, {
-          method,
+          method: formLeader.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formLeader)
-        });
-        setFormLeader({ id: null, nama: '', jabatan: '', no_hp: '' });
-        fetchData('Data Pengurus');
+        }).then(() => { setFormLeader({ id: null, nama: '', jabatan: '', no_hp: '' }); fetchData('Data Pengurus'); });
       };
 
-      const handleDeleteLeader = async (id) => {
-        if (confirm('Yakin ingin menghapus data pengurus ini?')) {
-          await fetch(`/api/leaders/${id}`, { method: 'DELETE' });
-          fetchData('Data Pengurus');
-        }
-      };
-
-      // Handlers CRUD Warga
+      // CRUD Warga
       const handleSaveMember = async (e) => {
         e.preventDefault();
         const url = formMember.id ? `/api/members/${formMember.id}` : '/api/members';
-        const method = formMember.id ? 'PUT' : 'POST';
         await fetch(url, {
-          method,
+          method: formMember.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formMember)
-        });
-        setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
-        fetchData('Data Warga');
+        }).then(() => { setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' }); fetchData('Data Warga'); });
       };
 
-      const handleDeleteMember = async (id) => {
-        if (confirm('Yakin ingin menghapus data warga ini?')) {
-          await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      // Input Iuran Bulanan Warga oleh Pengurus/Admin
+      const handleSaveIuran = async (e) => {
+        e.preventDefault();
+        await fetch('/api/iuran', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formIuran, input_oleh: loggedInUser.nama })
+        }).then(() => {
+          setFormIuran({ warga_id: '', bulan: 'Januari', tahun: '2026', nominal: 0, keterangan: 'Iuran Bulanan' });
+          fetchAllData();
           fetchData('Data Warga');
-        }
+        });
       };
 
-      // Handlers Modul Kas
+      // Modul Kas (Kas Gang, Cor Jalan, Ibu-Ibu)
       const handleSaveKas = async (e, routeName) => {
         e.preventDefault();
         const url = formKas.id ? `/api/${routeName}/${formKas.id}` : `/api/${routeName}`;
-        const method = formKas.id ? 'PUT' : 'POST';
         await fetch(url, {
-          method,
+          method: formKas.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...formKas, input_oleh: loggedInUser.nama })
+        }).then(() => {
+          setFormKas({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
+          fetchAllData();
+          fetchData(activeMenu);
         });
-        setFormKas({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
-        fetchAllData();
-        fetchData(activeMenu);
       };
 
       const handleDeleteKas = async (id, routeName) => {
         if (confirm('Hapus pencatatan ini?')) {
-          await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' });
-          fetchAllData();
-          fetchData(activeMenu);
-        }
-      };
-
-      // Handlers Modul Tunggakan
-      const handleSaveTunggakan = async (e) => {
-        e.preventDefault();
-        const url = formTunggakan.id ? `/api/tunggakan/${formTunggakan.id}` : '/api/tunggakan';
-        const method = formTunggakan.id ? 'PUT' : 'POST';
-        await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formTunggakan)
-        });
-        setFormTunggakan({ id: null, nama_nasabah: '', jenis_iuran: 'Kas Gang', jumlah_tunggakan: 0, status: 'Belum Lunas' });
-        fetchData('Tunggakan');
-      };
-
-      const handleDeleteTunggakan = async (id) => {
-        if (confirm('Hapus data tunggakan ini?')) {
-          await fetch(`/api/tunggakan/${id}`, { method: 'DELETE' });
-          fetchData('Tunggakan');
+          await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' }).then(() => { fetchAllData(); fetchData(activeMenu); });
         }
       };
 
       const isAdmin = loggedInUser?.role === 'SUPER_ADMIN' || loggedInUser?.role === 'ADMIN';
+      const isWarga = loggedInUser?.role === 'WARGA';
 
       if (loggedInUser) {
         return (
           <div className="min-h-screen bg-slate-100 flex">
-            {/* Sidebar Menu */}
+            {/* Sidebar */}
             <div className="w-64 bg-emerald-900 text-white flex flex-col shadow-xl">
               <div className="p-5 bg-emerald-950 text-center border-b border-emerald-800">
                 <h1 className="font-bold text-lg tracking-wider">NUANSA16A</h1>
                 <p className="text-xs text-emerald-300 mt-1">Buku Kas & Tabungan Warga</p>
               </div>
               <nav className="flex-1 p-4 space-y-1 overflow-y-auto text-sm">
-                {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus', 'Tunggakan', 'Laporan', 'Riwayat Transaksi', 'Audit Log', 'Backup Data', 'Restore Data', 'Pengaturan'].map((menu) => (
+                {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus', 'Tunggakan', 'Laporan', 'Riwayat Transaksi'].map((menu) => (
                   <button
                     key={menu}
                     onClick={() => { setActiveMenu(menu); setIsEditingDashboard(false); }}
@@ -307,21 +251,18 @@
                 ))}
               </nav>
               <div className="p-4 border-t border-emerald-800">
-                <button 
-                  onClick={() => setLoggedInUser(null)} 
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg transition text-sm shadow"
-                >
+                <button onClick={() => setLoggedInUser(null)} className="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg transition text-sm shadow">
                   Keluar Sistem
                 </button>
               </div>
             </div>
 
-            {/* Main Content Area */}
+            {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
               <header className="bg-white shadow-sm h-16 flex items-center justify-between px-8 border-b border-slate-200">
                 <h2 className="text-xl font-bold text-emerald-800">{activeMenu}</h2>
                 <div className="text-sm text-slate-600">
-                  Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role || 'LEADER'})
+                  Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role})
                 </div>
               </header>
 
@@ -330,17 +271,8 @@
                 {activeMenu === 'Dashboard' && (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-bold text-slate-700">Ringkasan Keuangan Warga (Otomatis)</h3>
-                      {isAdmin && (
-                        <button 
-                          onClick={() => setIsEditingDashboard(!isEditingDashboard)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm transition shadow"
-                        >
-                          {isEditingDashboard ? 'Selesai Edit' : 'Edit Judul & Keterangan'}
-                        </button>
-                      )}
+                      <h3 className="text-lg font-bold text-slate-700">Ringkasan Saldo Otomatis</h3>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Kas Gang</p>
@@ -355,124 +287,97 @@
                         <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalJimpitan.toLocaleString('id-ID')}</h3>
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Keuangan Ibu Ibu</p>
+                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Ibu Ibu</p>
                         <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalIbuIbu.toLocaleString('id-ID')}</h3>
                       </div>
                     </div>
-
                     <div className="bg-white p-6 rounded-xl shadow-sm space-y-3">
-                      {isEditingDashboard ? (
-                        <div className="space-y-3">
-                          <input 
-                            type="text" 
-                            value={dashboardMeta.judul} 
-                            onChange={(e) => setDashboardMeta({ ...dashboardMeta, judul: e.target.value })}
-                            className="w-full border rounded p-2 font-bold text-lg"
-                          />
-                          <textarea 
-                            value={dashboardMeta.deskripsi} 
-                            onChange={(e) => setDashboardMeta({ ...dashboardMeta, deskripsi: e.target.value })}
-                            className="w-full border rounded p-2 text-sm"
-                            rows="3"
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <h3 className="text-lg font-bold text-slate-700">{dashboardMeta.judul}</h3>
-                          <p className="text-slate-600 text-sm">{dashboardMeta.deskripsi}</p>
-                        </>
-                      )}
+                      <h3 className="text-lg font-bold text-slate-700">{dashboardMeta.judul}</h3>
+                      <p className="text-slate-600 text-sm">{dashboardMeta.deskripsi}</p>
                     </div>
                   </div>
                 )}
 
-                {/* DATA PENGURUS */}
-                {activeMenu === 'Data Pengurus' && (
+                {/* DATA WARGA & IURAN BULANAN */}
+                {activeMenu === 'Data Warga' && (
                   <div className="space-y-6">
                     {isAdmin && (
                       <div className="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 className="font-bold text-slate-700 mb-4">{formLeader.id ? 'Edit Data Pengurus' : 'Tambah Pengurus Baru'}</h3>
-                        <form onSubmit={handleSaveLeader} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <input type="text" placeholder="Nama Pengurus" value={formLeader.nama} onChange={e => setFormLeader({ ...formLeader, nama: e.target.value })} className="border p-2 rounded" required />
-                          <input type="text" placeholder="Jabatan" value={formLeader.jabatan} onChange={e => setFormLeader({ ...formLeader, jabatan: e.target.value })} className="border p-2 rounded" required />
-                          <input type="text" placeholder="Nomor HP (untuk OTP)" value={formLeader.no_hp} onChange={e => setFormLeader({ ...formLeader, no_hp: e.target.value })} className="border p-2 rounded" required />
-                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formLeader.id ? 'Perbarui' : 'Tambah'}</button>
+                        <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Warga' : 'Tambah Warga Baru'}</h3>
+                        <form onSubmit={handleSaveMember} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <input type="text" placeholder="NIK" value={formMember.nik} onChange={e => setFormMember({ ...formMember, nik: e.target.value })} className="border p-2 rounded" />
+                          <input type="text" placeholder="Nama Lengkap" value={formMember.nama} onChange={e => setFormMember({ ...formMember, nama: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Alamat / Blok" value={formMember.alamat} onChange={e => setFormMember({ ...formMember, alamat: e.target.value })} className="border p-2 rounded" />
+                          <input type="text" placeholder="Nomor HP (untuk Login OTP)" value={formMember.no_hp} onChange={e => setFormMember({ ...formMember, no_hp: e.target.value })} className="border p-2 rounded" required />
+                          <select value={formMember.kategori} onChange={e => setFormMember({ ...formMember, kategori: e.target.value })} className="border p-2 rounded">
+                            <option value="Warga Tetap">Warga Tetap</option>
+                            <option value="Warga Kontrak">Warga Kontrak</option>
+                          </select>
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">Simpan Warga</button>
                         </form>
                       </div>
                     )}
 
+                    {/* Form Input Iuran Bulanan oleh Pengurus/Admin */}
+                    {!isWarga && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl shadow-sm">
+                        <h3 className="font-bold text-emerald-800 mb-4">Input Iuran Bulanan Warga (Otomatis Masuk Kas Gang)</h3>
+                        <form onSubmit={handleSaveIuran} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <select value={formIuran.warga_id} onChange={e => setFormIuran({ ...formIuran, warga_id: e.target.value })} className="border p-2 rounded" required>
+                            <option value="">-- Pilih Nama Warga --</option>
+                            {members.map(w => <option key={w.id} value={w.id}>{w.nama} ({w.alamat})</option>)}
+                          </select>
+                          <select value={formIuran.bulan} onChange={e => setFormIuran({ ...formIuran, bulan: e.target.value })} className="border p-2 rounded">
+                            {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map(b => <option key={b} value={b}>{b}</option>)}
+                          </select>
+                          <input type="text" value={formIuran.tahun} onChange={e => setFormIuran({ ...formIuran, tahun: e.target.value })} className="border p-2 rounded" placeholder="Tahun" required />
+                          <input type="number" placeholder="Nominal (Rp)" value={formIuran.nominal} onChange={e => setFormIuran({ ...formIuran, nominal: Number(e.target.value) })} className="border p-2 rounded" required />
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">Simpan Iuran</button>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* Tabel Data Warga */}
                     <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
-                      <table className="w-full text-left text-sm border-collapse">
+                      <h3 className="font-bold text-slate-700 mb-3">Daftar Warga & Riwayat Iuran Bulanan</h3>
+                      <table className="w-full text-left text-sm border-collapse mb-6">
                         <thead>
                           <tr className="border-b bg-slate-50">
                             <th className="p-3">Nama</th>
-                            <th className="p-3">Jabatan</th>
-                            <th className="p-3">Nomor HP</th>
-                            {isAdmin && <th className="p-3 text-right">Aksi</th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {leaders.map(l => (
-                            <tr key={l.id} className="border-b hover:bg-slate-50">
-                              <td className="p-3 font-medium">{l.nama}</td>
-                              <td className="p-3">{l.jabatan}</td>
-                              <td className="p-3">{l.no_hp}</td>
-                              {isAdmin && (
-                                <td className="p-3 text-right space-x-2">
-                                  <button onClick={() => setFormLeader(l)} className="text-amber-600 font-semibold hover:underline">Edit</button>
-                                  <button onClick={() => handleDeleteLeader(l.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* DATA WARGA */}
-                {activeMenu === 'Data Warga' && (
-                  <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Warga' : 'Tambah Warga Baru'}</h3>
-                      <form onSubmit={handleSaveMember} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input type="text" placeholder="NIK" value={formMember.nik} onChange={e => setFormMember({ ...formMember, nik: e.target.value })} className="border p-2 rounded" />
-                        <input type="text" placeholder="Nama Lengkap" value={formMember.nama} onChange={e => setFormMember({ ...formMember, nama: e.target.value })} className="border p-2 rounded" required />
-                        <input type="text" placeholder="Alamat / Blok Rumah" value={formMember.alamat} onChange={e => setFormMember({ ...formMember, alamat: e.target.value })} className="border p-2 rounded" />
-                        <input type="text" placeholder="Nomor HP" value={formMember.no_hp} onChange={e => setFormMember({ ...formMember, no_hp: e.target.value })} className="border p-2 rounded" />
-                        <select value={formMember.kategori} onChange={e => setFormMember({ ...formMember, kategori: e.target.value })} className="border p-2 rounded">
-                          <option value="Warga Tetap">Warga Tetap</option>
-                          <option value="Warga Kontrak">Warga Kontrak</option>
-                        </select>
-                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formMember.id ? 'Simpan Perubahan' : 'Simpan Data'}</button>
-                      </form>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b bg-slate-50">
-                            <th className="p-3">Nama</th>
-                            <th className="p-3">NIK</th>
                             <th className="p-3">Alamat</th>
                             <th className="p-3">No HP</th>
                             <th className="p-3">Kategori</th>
-                            <th className="p-3 text-right">Aksi</th>
                           </tr>
                         </thead>
                         <tbody>
                           {members.map(m => (
                             <tr key={m.id} className="border-b hover:bg-slate-50">
                               <td className="p-3 font-medium">{m.nama}</td>
-                              <td className="p-3">{m.nik || '-'}</td>
                               <td className="p-3">{m.alamat}</td>
                               <td className="p-3">{m.no_hp}</td>
                               <td className="p-3">{m.kategori}</td>
-                              <td className="p-3 text-right space-x-2">
-                                <button onClick={() => setFormMember(m)} className="text-amber-600 font-semibold hover:underline">Edit</button>
-                                {isAdmin && <button onClick={() => handleDeleteMember(m.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>}
-                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      <h3 className="font-bold text-slate-700 mb-3">Log Riwayat Iuran Masuk</h3>
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-slate-50">
+                            <th className="p-3">Nama Warga</th>
+                            <th className="p-3">Periode Bulan/Tahun</th>
+                            <th className="p-3 text-emerald-600">Nominal Iuran</th>
+                            <th className="p-3">Penginput</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {iuranList.map(i => (
+                            <tr key={i.id} className="border-b hover:bg-slate-50">
+                              <td className="p-3 font-medium">{i.nama_warga}</td>
+                              <td className="p-3">{i.bulan} {i.tahun}</td>
+                              <td className="p-3 text-emerald-600 font-bold">Rp {(i.nominal || 0).toLocaleString('id-ID')}</td>
+                              <td className="p-3 text-slate-500">{i.input_oleh}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -481,19 +386,21 @@
                   </div>
                 )}
 
-                {/* MODUL KAS (Kas Gang, Cor Jalan, Keuangan Ibu Ibu) */}
+                {/* MODUL KAS (Kas Gang, Cor Jalan, Ibu-Ibu) */}
                 {['Kas Gang', 'Cor Jalan', 'Keuangan Ibu Ibu'].includes(activeMenu) && (
                   <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h3 className="font-bold text-slate-700 mb-4">{formKas.id ? `Edit Data ${activeMenu}` : `Input Transaksi ${activeMenu}`}</h3>
-                      <form onSubmit={(e) => handleSaveKas(e, activeMenu === 'Keuangan Ibu Ibu' ? 'ibu-ibu' : activeMenu.toLowerCase().replace(' ', '-'))} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                        <input type="date" value={formKas.tanggal} onChange={e => setFormKas({ ...formKas, tanggal: e.target.value })} className="border p-2 rounded" required />
-                        <input type="text" placeholder="Uraian Transaksi" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
-                        <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
-                        <input type="number" placeholder="Keluar (Rp)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
-                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formKas.id ? 'Update Admin' : 'Input Transaksi'}</button>
-                      </form>
-                    </div>
+                    {!isWarga && (
+                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4">{formKas.id ? 'Edit Transaksi' : `Input Transaksi ${activeMenu}`}</h3>
+                        <form onSubmit={(e) => handleSaveKas(e, activeMenu === 'Keuangan Ibu Ibu' ? 'ibu-ibu' : activeMenu.toLowerCase().replace(' ', '-'))} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <input type="date" value={formKas.tanggal} onChange={e => setFormKas({ ...formKas, tanggal: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Uraian / Keterangan" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
+                          <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
+                          <input type="number" placeholder="Keluar (Pengeluaran)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">Simpan Transaksi</button>
+                        </form>
+                      </div>
+                    )}
 
                     <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
                       <table className="w-full text-left text-sm border-collapse">
@@ -502,9 +409,8 @@
                             <th className="p-3">Tanggal</th>
                             <th className="p-3">Uraian</th>
                             <th className="p-3 text-emerald-600">Masuk</th>
-                            <th className="p-3 text-rose-600">Keluar</th>
-                            <th className="p-3">Input Oleh</th>
-                            <th className="p-3 text-right">Aksi</th>
+                            <th className="p-3 text-rose-600">Keluar (Pengurangan Saldo)</th>
+                            <th className="p-3">Oleh</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -513,65 +419,8 @@
                               <td className="p-3">{item.tanggal}</td>
                               <td className="p-3 font-medium">{item.uraian}</td>
                               <td className="p-3 text-emerald-600">Rp {(item.masuk || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-3 text-rose-600">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-3 text-slate-500">{item.input_oleh || 'Leader'}</td>
-                              <td className="p-3 text-right space-x-2">
-                                {isAdmin ? (
-                                  <>
-                                    <button onClick={() => setFormKas(item)} className="text-amber-600 font-semibold hover:underline">Edit Admin</button>
-                                    <button onClick={() => handleDeleteKas(item.id, activeMenu === 'Keuangan Ibu Ibu' ? 'ibu-ibu' : activeMenu.toLowerCase().replace(' ', '-'))} className="text-rose-600 font-semibold hover:underline">Hapus</button>
-                                  </>
-                                ) : (
-                                  <span className="text-xs text-slate-400">Hanya Admin Boleh Edit</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* MODUL TUNGGAKAN */}
-                {activeMenu === 'Tunggakan' && (
-                  <div className="space-y-6">
-                    {isAdmin && (
-                      <div className="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 className="font-bold text-slate-700 mb-4">{formTunggakan.id ? 'Edit Data Tunggakan' : 'Catat Tunggakan Baru'}</h3>
-                        <form onSubmit={handleSaveTunggakan} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <input type="text" placeholder="Nama Warga" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
-                          <input type="text" placeholder="Jenis Iuran" value={formTunggakan.jenis_iuran} onChange={e => setFormTunggakan({ ...formTunggakan, jenis_iuran: e.target.value })} className="border p-2 rounded" required />
-                          <input type="number" placeholder="Nominal Tunggakan" value={formTunggakan.jumlah_tunggakan} onChange={e => setFormTunggakan({ ...formTunggakan, jumlah_tunggakan: Number(e.target.value) })} className="border p-2 rounded" required />
-                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formTunggakan.id ? 'Perbarui' : 'Simpan'}</button>
-                        </form>
-                      </div>
-                    )}
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b bg-slate-50">
-                            <th className="p-3">Nama Warga</th>
-                            <th className="p-3">Jenis Iuran</th>
-                            <th className="p-3 text-rose-600">Jumlah Tunggakan</th>
-                            <th className="p-3">Status</th>
-                            {isAdmin && <th className="p-3 text-right">Aksi</th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tunggakanList.map(t => (
-                            <tr key={t.id} className="border-b hover:bg-slate-50">
-                              <td className="p-3 font-medium">{t.nama_nasabah}</td>
-                              <td className="p-3">{t.jenis_iuran}</td>
-                              <td className="p-3 font-bold text-rose-600">Rp {(t.jumlah_tunggakan || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-3"><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs">{t.status}</span></td>
-                              {isAdmin && (
-                                <td className="p-3 text-right space-x-2">
-                                  <button onClick={() => setFormTunggakan(t)} className="text-amber-600 font-semibold hover:underline">Edit</button>
-                                  <button onClick={() => handleDeleteTunggakan(t.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>
-                                </td>
-                              )}
+                              <td className="p-3 text-rose-600 font-bold">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
+                              <td className="p-3 text-slate-500">{item.input_oleh || 'Sistem'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -581,10 +430,10 @@
                 )}
 
                 {/* MENU LAINNYA */}
-                {!['Dashboard', 'Data Pengurus', 'Data Warga', 'Kas Gang', 'Cor Jalan', 'Keuangan Ibu Ibu', 'Tunggakan'].includes(activeMenu) && (
+                {!['Dashboard', 'Kas Gang', 'Cor Jalan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus'].includes(activeMenu) && (
                   <div className="bg-white p-6 rounded-xl shadow-sm">
                     <h3 className="text-lg font-bold text-slate-700 mb-2">Halaman {activeMenu}</h3>
-                    <p className="text-slate-600 text-sm">Modul dan pengaturan untuk <strong>{activeMenu}</strong> siap digunakan.</p>
+                    <p className="text-slate-600 text-sm">Modul <strong>{activeMenu}</strong> siap digunakan.</p>
                   </div>
                 )}
               </main>
@@ -593,7 +442,7 @@
         );
       }
 
-      // HALAMAN LOGIN & OTP
+      // HALAMAN LOGIN DENGAN 3 PILIHAN (Admin, Pengurus OTP, Warga OTP)
       return (
         <div className="min-h-screen flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -601,19 +450,10 @@
               <h2 className="text-xl font-bold tracking-wide">BUKU KAS & TABUNGAN WARGA</h2>
               <p className="text-emerald-100 text-sm mt-1">NUANSA16A C3/C8</p>
 
-              <div className="flex bg-emerald-800 rounded-lg p-1 mt-4 text-xs font-semibold">
-                <button 
-                  onClick={() => { setLoginMode('ADMIN'); setErrorMsg(''); setSuccessMsg(''); }}
-                  className={`flex-1 py-1.5 rounded-md ${loginMode === 'ADMIN' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}
-                >
-                  Login Admin
-                </button>
-                <button 
-                  onClick={() => { setLoginMode('LEADER_OTP'); setErrorMsg(''); setSuccessMsg(''); }}
-                  className={`flex-1 py-1.5 rounded-md ${loginMode === 'LEADER_OTP' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}
-                >
-                  Login Leader (OTP)
-                </button>
+              <div className="grid grid-cols-3 gap-1 bg-emerald-800 rounded-lg p-1 mt-4 text-xs font-semibold">
+                <button onClick={() => { setLoginMode('ADMIN'); setErrorMsg(''); setSuccessMsg(''); }} className={`py-1.5 rounded-md ${loginMode === 'ADMIN' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}>Admin</button>
+                <button onClick={() => { setLoginMode('LEADER_OTP'); setErrorMsg(''); setSuccessMsg(''); }} className={`py-1.5 rounded-md ${loginMode === 'LEADER_OTP' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}>Pengurus</button>
+                <button onClick={() => { setLoginMode('WARGA_OTP'); setErrorMsg(''); setSuccessMsg(''); }} className={`py-1.5 rounded-md ${loginMode === 'WARGA_OTP' ? 'bg-white text-emerald-900 shadow' : 'text-emerald-200'}`}>Warga</button>
               </div>
             </div>
 
@@ -622,38 +462,62 @@
               {successMsg && <div className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">{successMsg}</div>}
               {devOtpMsg && <div className="mb-4 bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-lg text-xs font-mono">{devOtpMsg}</div>}
 
+              {/* ADMIN LOGIN */}
               {loginMode === 'ADMIN' && (
                 <form onSubmit={handleLoginAdmin} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Username Admin</label>
-                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="admin" required />
+                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="admin123" required />
+                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
                   </div>
-                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Masuk Admin</button>
+                  <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg">Masuk Admin</button>
                 </form>
               )}
 
+              {/* PENGURUS OTP LOGIN */}
               {loginMode === 'LEADER_OTP' && (
                 <div className="space-y-4">
                   {!otpSent ? (
-                    <form onSubmit={handleRequestOtp} className="space-y-4">
+                    <form onSubmit={(e) => handleRequestOtp(e, 'LEADER')} className="space-y-4">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nomor HP Leader</label>
-                        <input type="text" value={noHpLeader} onChange={(e) => setNoHpLeader(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="08123456789" required />
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nomor HP Pengurus</label>
+                        <input type="text" value={noHpLeader} onChange={e => setNoHpLeader(e.target.value)} className="w-full px-4 py-2 border rounded-lg" placeholder="08..." required />
                       </div>
-                      <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Minta Kode OTP</button>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg">Kirim OTP Pengurus</button>
                     </form>
                   ) : (
-                    <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <form onSubmit={(e) => handleVerifyOtp(e, 'LEADER')} className="space-y-4">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Masukkan Kode OTP 4 Digit</label>
-                        <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} className="w-full px-4 py-2 border text-center font-mono text-xl tracking-widest rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="1234" maxLength="4" required />
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kode OTP 4 Digit</label>
+                        <input type="text" value={otpCode} onChange={e => setOtpCode(e.target.value)} className="w-full px-4 py-2 border text-center font-mono text-xl tracking-widest rounded-lg" maxLength="4" required />
                       </div>
-                      <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow transition">Verifikasi & Masuk</button>
-                      <button type="button" onClick={() => setOtpSent(false)} className="w-full text-xs text-slate-500 hover:underline">Ganti Nomor HP</button>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg">Verifikasi & Masuk</button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* WARGA OTP LOGIN */}
+              {loginMode === 'WARGA_OTP' && (
+                <div className="space-y-4">
+                  {!otpSent ? (
+                    <form onSubmit={(e) => handleRequestOtp(e, 'WARGA')} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nomor HP Warga</label>
+                        <input type="text" value={noHpWarga} onChange={e => setNoHpWarga(e.target.value)} className="w-full px-4 py-2 border rounded-lg" placeholder="08..." required />
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg">Kirim OTP Warga</button>
+                    </form>
+                  ) : (
+                    <form onSubmit={(e) => handleVerifyOtp(e, 'WARGA')} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kode OTP 4 Digit</label>
+                        <input type="text" value={otpCode} onChange={e => setOtpCode(e.target.value)} className="w-full px-4 py-2 border text-center font-mono text-xl tracking-widest rounded-lg" maxLength="4" required />
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg">Verifikasi & Masuk</button>
                     </form>
                   )}
                 </div>
