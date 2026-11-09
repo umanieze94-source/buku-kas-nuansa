@@ -15,7 +15,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Inisialisasi Database SQLite
 const db = new sqlite3.Database('./database.sqlite', (err) => {
   if (err) {
     console.error('Gagal membuka database SQLite:', err.message);
@@ -27,7 +26,6 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
 
 function initDatabase() {
   db.serialize(() => {
-    // Tabel Users (Admin)
     db.run(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -37,7 +35,6 @@ function initDatabase() {
       must_change_password INTEGER DEFAULT 1
     )`);
 
-    // Tabel Pengurus (Leader) dengan OTP
     db.run(`CREATE TABLE IF NOT EXISTS leaders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nama TEXT NOT NULL,
@@ -46,7 +43,6 @@ function initDatabase() {
       pin_otp TEXT
     )`);
 
-    // Tabel Warga / Nasabah (Dilengkapi kolom pin_otp untuk login warga)
     db.run(`CREATE TABLE IF NOT EXISTS members (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nik TEXT,
@@ -57,7 +53,6 @@ function initDatabase() {
       pin_otp TEXT
     )`);
 
-    // Tabel Iuran Bulanan Warga (Diinput oleh Pengurus)
     db.run(`CREATE TABLE IF NOT EXISTS iuran_warga (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       warga_id INTEGER,
@@ -69,7 +64,6 @@ function initDatabase() {
       FOREIGN KEY(warga_id) REFERENCES members(id)
     )`);
 
-    // Tabel Modul Keuangan
     db.run(`CREATE TABLE IF NOT EXISTS kas_gang (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -114,7 +108,6 @@ function initDatabase() {
       status TEXT DEFAULT 'Belum Lunas'
     )`);
 
-    // Buat Akun Super Admin Default
     db.get(`SELECT * FROM users WHERE username = 'admin'`, async (err, row) => {
       if (!row) {
         const hashedPassword = await bcrypt.hash('admin123', 10);
@@ -127,8 +120,7 @@ function initDatabase() {
   });
 }
 
-// ==================== AUTHENTICATION (ADMIN, LEADER, WARGA) ====================
-
+// AUTH
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
@@ -139,7 +131,6 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// Request OTP Pengurus
 app.post('/api/leader/request-otp', (req, res) => {
   const { no_hp } = req.body;
   db.get(`SELECT * FROM leaders WHERE no_hp = ?`, [no_hp], (err, leader) => {
@@ -160,11 +151,10 @@ app.post('/api/leader/verify-otp', (req, res) => {
   });
 });
 
-// Request OTP Warga (Sama seperti Pengurus)
 app.post('/api/warga/request-otp', (req, res) => {
   const { no_hp } = req.body;
   db.get(`SELECT * FROM members WHERE no_hp = ?`, [no_hp], (err, warga) => {
-    if (err || !warga) return res.status(404).json({ success: false, message: 'Nomor HP Warga tidak terdaftar di sistem!' });
+    if (err || !warga) return res.status(404).json({ success: false, message: 'Nomor HP Warga tidak terdaftar!' });
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     db.run(`UPDATE members SET pin_otp = ? WHERE no_hp = ?`, [otp, no_hp], () => {
       res.json({ success: true, message: 'Kode OTP Warga berhasil dikirim!', dev_otp: otp });
@@ -181,8 +171,7 @@ app.post('/api/warga/verify-otp', (req, res) => {
   });
 });
 
-// ==================== ENDPOINT DATA PENGURUS & WARGA ====================
-
+// MEMBERS & LEADERS
 app.get('/api/leaders', (req, res) => {
   db.all(`SELECT * FROM leaders`, [], (err, rows) => res.json({ success: true, data: rows }));
 });
@@ -203,7 +192,7 @@ app.get('/api/members', (req, res) => {
 app.post('/api/members', (req, res) => {
   const { nik, nama, alamat, no_hp, kategori } = req.body;
   db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga (No HP mungkin kembar).' });
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga.' });
     res.json({ success: true, message: 'Warga berhasil ditambahkan!' });
   });
 });
@@ -215,7 +204,7 @@ app.delete('/api/members/:id', (req, res) => {
   db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
-// ==================== ENDPOINT IURAN BULANAN WARGA ====================
+// IURAN
 app.get('/api/iuran', (req, res) => {
   db.all(`SELECT iuran_warga.*, members.nama as nama_warga FROM iuran_warga JOIN members ON iuran_warga.warga_id = members.id ORDER BY id DESC`, [], (err, rows) => {
     res.json({ success: true, data: rows });
@@ -228,7 +217,6 @@ app.post('/api/iuran', (req, res) => {
     [warga_id, bulan, tahun, nominal, keterangan, input_oleh], function(err) {
       if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan iuran.' });
       
-      // Otomatis catat juga ke Kas Gang sebagai pemasukan kas warga bulanan
       db.get(`SELECT nama FROM members WHERE id = ?`, [warga_id], (err, warga) => {
         const namaWarga = warga ? warga.nama : 'Warga';
         const uraianKas = `Iuran Bulanan (${bulan} ${tahun}) - ${namaWarga}`;
@@ -246,7 +234,7 @@ app.delete('/api/iuran/:id', (req, res) => {
   db.run(`DELETE FROM iuran_warga WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
-// ==================== MODUL KAS (Kas Gang, Cor Jalan, Ibu-Ibu) ====================
+// MODUL KAS
 function setupModuleEndpoints(routeName, tableName) {
   app.get(`/api/${routeName}`, (req, res) => {
     db.all(`SELECT * FROM ${tableName} ORDER BY id DESC`, [], (err, rows) => res.json({ success: true, data: rows }));
@@ -277,7 +265,7 @@ setupModuleEndpoints('cor-jalan', 'cor_jalan');
 setupModuleEndpoints('jimpitan', 'jimpitan');
 setupModuleEndpoints('ibu-ibu', 'ibu_ibu');
 
-// ==================== TUNGGAKAN ====================
+// TUNGGAKAN
 app.get('/api/tunggakan', (req, res) => {
   db.all(`SELECT * FROM tunggakan`, [], (err, rows) => res.json({ success: true, data: rows }));
 });
