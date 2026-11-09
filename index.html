@@ -67,11 +67,11 @@
 
       const fetchData = async (menu) => {
         try {
-          if (menu === 'Data Leader') {
+          if (menu === 'Data Pengurus') {
             const res = await fetch('/api/leaders');
             const d = await res.json();
             if (d.success) setLeaders(d.data);
-          } else if (menu === 'Data Nasabah') {
+          } else if (menu === 'Data Warga') {
             const res = await fetch('/api/members');
             const d = await res.json();
             if (d.success) setMembers(d.data);
@@ -87,7 +87,7 @@
             const res = await fetch('/api/jimpitan');
             const d = await res.json();
             if (d.success) setJimpitanList(d.data);
-          } else if (menu === 'Ibu-Ibu') {
+          } else if (menu === 'Keuangan Ibu Ibu') {
             const res = await fetch('/api/ibu-ibu');
             const d = await res.json();
             if (d.success) setIbuIbuList(d.data);
@@ -176,17 +176,17 @@
           body: JSON.stringify(formLeader)
         });
         setFormLeader({ id: null, nama: '', jabatan: '', no_hp: '' });
-        fetchData('Data Leader');
+        fetchData('Data Pengurus');
       };
 
       const handleDeleteLeader = async (id) => {
-        if (confirm('Yakin ingin menghapus leader ini?')) {
+        if (confirm('Yakin ingin menghapus data pengurus ini?')) {
           await fetch(`/api/leaders/${id}`, { method: 'DELETE' });
-          fetchData('Data Leader');
+          fetchData('Data Pengurus');
         }
       };
 
-      // Handlers CRUD Nasabah (Admin & Leader)
+      // Handlers CRUD Nasabah/Warga (Admin & Leader)
       const handleSaveMember = async (e) => {
         e.preventDefault();
         const url = formMember.id ? `/api/members/${formMember.id}` : '/api/members';
@@ -197,17 +197,17 @@
           body: JSON.stringify(formMember)
         });
         setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
-        fetchData('Data Nasabah');
+        fetchData('Data Warga');
       };
 
       const handleDeleteMember = async (id) => {
-        if (confirm('Yakin ingin menghapus data nasabah ini?')) {
+        if (confirm('Yakin ingin menghapus data warga ini?')) {
           await fetch(`/api/members/${id}`, { method: 'DELETE' });
-          fetchData('Data Nasabah');
+          fetchData('Data Warga');
         }
       };
 
-      // Handlers Generic Modul Kas (Kas Gang, Cor Jalan, Ibu-Ibu)
+      // Handlers Generic Modul Kas (Kas Gang, Cor Jalan, Keuangan Ibu Ibu)
       const handleSaveKas = async (e, routeName) => {
         e.preventDefault();
         const url = formKas.id ? `/api/${routeName}/${formKas.id}` : `/api/${routeName}`;
@@ -261,7 +261,7 @@
                 <p className="text-xs text-emerald-300 mt-1">Buku Kas & Tabungan Warga</p>
               </div>
               <nav className="flex-1 p-4 space-y-1 overflow-y-auto text-sm">
-                {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Ibu-Ibu', 'Data Nasabah', 'Data Leader', 'Tunggakan', 'Laporan', 'Riwayat Transaksi', 'Audit Log', 'Backup Data', 'Restore Data', 'Pengaturan'].map((menu) => (
+                {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus', 'Tunggakan', 'Laporan', 'Riwayat Transaksi', 'Audit Log', 'Backup Data', 'Restore Data', 'Pengaturan'].map((menu) => (
                   <button
                     key={menu}
                     onClick={() => { setActiveMenu(menu); setIsEditingDashboard(false); }}
@@ -347,7 +347,7 @@
                         )}
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Ibu-Ibu</p>
+                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Keuangan Ibu Ibu</p>
                         {isEditingDashboard ? (
                           <input 
                             type="number" 
@@ -387,14 +387,14 @@
                   </div>
                 )}
 
-                {/* DATA LEADER (Hapus & Edit oleh Admin) */}
-                {activeMenu === 'Data Leader' && (
+                {/* DATA PENGURUS (Hapus & Edit oleh Admin) */}
+                {activeMenu === 'Data Pengurus' && (
                   <div className="space-y-6">
                     {isAdmin && (
                       <div className="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 className="font-bold text-slate-700 mb-4">{formLeader.id ? 'Edit Data Leader' : 'Tambah Leader Baru'}</h3>
+                        <h3 className="font-bold text-slate-700 mb-4">{formLeader.id ? 'Edit Data Pengurus' : 'Tambah Pengurus Baru'}</h3>
                         <form onSubmit={handleSaveLeader} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <input type="text" placeholder="Nama Leader" value={formLeader.nama} onChange={e => setFormLeader({ ...formLeader, nama: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Nama Pengurus" value={formLeader.nama} onChange={e => setFormLeader({ ...formLeader, nama: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Jabatan (cth: Leader Kas Gang)" value={formLeader.jabatan} onChange={e => setFormLeader({ ...formLeader, jabatan: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Nomor HP (untuk OTP)" value={formLeader.no_hp} onChange={e => setFormLeader({ ...formLeader, no_hp: e.target.value })} className="border p-2 rounded" required />
                           <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formLeader.id ? 'Perbarui' : 'Tambah'}</button>
@@ -432,11 +432,11 @@
                   </div>
                 )}
 
-                {/* DATA NASABAH (Admin & Leader Bisa Ubah Kapanpun) */}
-                {activeMenu === 'Data Nasabah' && (
+                {/* DATA WARGA (Admin & Leader Bisa Ubah Kapanpun) */}
+                {activeMenu === 'Data Warga' && (
                   <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Nasabah' : 'Tambah Nasabah Baru'}</h3>
+                      <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Warga' : 'Tambah Warga Baru'}</h3>
                       <form onSubmit={handleSaveMember} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <input type="text" placeholder="NIK" value={formMember.nik} onChange={e => setFormMember({ ...formMember, nik: e.target.value })} className="border p-2 rounded" />
                         <input type="text" placeholder="Nama Lengkap" value={formMember.nama} onChange={e => setFormMember({ ...formMember, nama: e.target.value })} className="border p-2 rounded" required />
@@ -482,12 +482,12 @@
                   </div>
                 )}
 
-                {/* MODUL KAS (Kas Gang, Cor Jalan, Ibu-Ibu) */}
-                {['Kas Gang', 'Cor Jalan', 'Ibu-Ibu'].includes(activeMenu) && (
+                {/* MODUL KAS (Kas Gang, Cor Jalan, Keuangan Ibu Ibu) */}
+                {['Kas Gang', 'Cor Jalan', 'Keuangan Ibu Ibu'].includes(activeMenu) && (
                   <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm">
                       <h3 className="font-bold text-slate-700 mb-4">{formKas.id ? `Edit Data ${activeMenu}` : `Input Transaksi ${activeMenu}`}</h3>
-                      <form onSubmit={(e) => handleSaveKas(e, activeMenu.toLowerCase().replace(' ', '-'))} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                      <form onSubmit={(e) => handleSaveKas(e, activeMenu === 'Keuangan Ibu Ibu' ? 'ibu-ibu' : activeMenu.toLowerCase().replace(' ', '-'))} className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <input type="date" value={formKas.tanggal} onChange={e => setFormKas({ ...formKas, tanggal: e.target.value })} className="border p-2 rounded" required />
                         <input type="text" placeholder="Uraian Transaksi" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
                         <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
@@ -520,7 +520,7 @@
                                 {isAdmin ? (
                                   <>
                                     <button onClick={() => setFormKas(item)} className="text-amber-600 font-semibold hover:underline">Edit Admin</button>
-                                    <button onClick={() => handleDeleteKas(item.id, activeMenu.toLowerCase().replace(' ', '-'))} className="text-rose-600 font-semibold hover:underline">Hapus</button>
+                                    <button onClick={() => handleDeleteKas(item.id, activeMenu === 'Keuangan Ibu Ibu' ? 'ibu-ibu' : activeMenu.toLowerCase().replace(' ', '-'))} className="text-rose-600 font-semibold hover:underline">Hapus</button>
                                   </>
                                 ) : (
                                   <span className="text-xs text-slate-400">Hanya Admin Boleh Edit</span>
@@ -541,7 +541,7 @@
                       <div className="bg-white p-6 rounded-xl shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4">{formTunggakan.id ? 'Edit Data Tunggakan' : 'Catat Tunggakan Baru'}</h3>
                         <form onSubmit={handleSaveTunggakan} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <input type="text" placeholder="Nama Nasabah / Warga" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Nama Warga / Nasabah" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Jenis Iuran" value={formTunggakan.jenis_iuran} onChange={e => setFormTunggakan({ ...formTunggakan, jenis_iuran: e.target.value })} className="border p-2 rounded" required />
                           <input type="number" placeholder="Nominal Tunggakan" value={formTunggakan.jumlah_tunggakan} onChange={e => setFormTunggakan({ ...formTunggakan, jumlah_tunggakan: Number(e.target.value) })} className="border p-2 rounded" required />
                           <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formTunggakan.id ? 'Perbarui' : 'Simpan'}</button>
@@ -553,7 +553,7 @@
                       <table className="w-full text-left text-sm border-collapse">
                         <thead>
                           <tr className="border-b bg-slate-50">
-                            <th className="p-3">Nama Nasabah</th>
+                            <th className="p-3">Nama Warga</th>
                             <th className="p-3">Jenis Iuran</th>
                             <th className="p-3 text-rose-600">Jumlah Tunggakan</th>
                             <th className="p-3">Status</th>
@@ -582,7 +582,7 @@
                 )}
 
                 {/* MENU LAINNYA */}
-                {!['Dashboard', 'Data Leader', 'Data Nasabah', 'Kas Gang', 'Cor Jalan', 'Ibu-Ibu', 'Tunggakan'].includes(activeMenu) && (
+                {!['Dashboard', 'Data Pengurus', 'Data Warga', 'Kas Gang', 'Cor Jalan', 'Keuangan Ibu Ibu', 'Tunggakan'].includes(activeMenu) && (
                   <div className="bg-white p-6 rounded-xl shadow-sm">
                     <h3 className="text-lg font-bold text-slate-700 mb-2">Halaman {activeMenu}</h3>
                     <p className="text-slate-600 text-sm">Modul dan pengaturan untuk <strong>{activeMenu}</strong> siap digunakan.</p>
