@@ -9,11 +9,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname)));
 
-// Rute eksplisit untuk menangani halaman utama (Root '/')
+// Rute eksplisit untuk menangani halaman utama (karena index.html sejajar dengan server.js)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Inisialisasi Database SQLite
@@ -101,7 +101,7 @@ app.post('/api/change-password', async (req, res) => {
   const { username, newPassword } = req.body;
 
   if (!username || !newPassword) {
-    return res.status(0).json({ success: false, message: 'Data tidak lengkap!' });
+    return res.status(400).json({ success: false, message: 'Data tidak lengkap!' });
   }
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
