@@ -17,7 +17,7 @@
 
     function App() {
       // Auth States
-      const [loginMode, setLoginMode] = useState('ADMIN'); // 'ADMIN' or 'LEADER_OTP'
+      const [loginMode, setLoginMode] = useState('ADMIN'); 
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
       const [noHpLeader, setNoHpLeader] = useState('');
@@ -33,13 +33,9 @@
       const [activeMenu, setActiveMenu] = useState('Dashboard');
 
       // Data States
-      const [dashboardData, setDashboardData] = useState({
+      const [dashboardMeta, setDashboardMeta] = useState({
         judul: 'Ringkasan Aktivitas Keuangan Real-Time',
-        deskripsi: 'Sistem berjalan normal secara online di cloud Railway.',
-        kasGang: 4500000,
-        corJalan: 12800000,
-        jimpitan: 17500000,
-        ibuIbu: 3200000
+        deskripsi: 'Sistem berjalan otomatis dan terintegrasi secara online di cloud Railway.'
       });
       const [isEditingDashboard, setIsEditingDashboard] = useState(false);
 
@@ -58,12 +54,42 @@
       const [formJimpitan, setFormJimpitan] = useState({ id: null, tanggal: '', nama_warga: '', nominal: 0, keterangan: '' });
       const [formTunggakan, setFormTunggakan] = useState({ id: null, nama_nasabah: '', jenis_iuran: 'Kas Gang', jumlah_tunggakan: 0, status: 'Belum Lunas' });
 
-      // Fetch Data Saat Menu Berubah
+      // Fetch Semua Data Saat Login atau Menu Berubah agar Dashboard selalu akurat
+      useEffect(() => {
+        if (loggedInUser) {
+          fetchAllData();
+        }
+      }, [loggedInUser]);
+
       useEffect(() => {
         if (loggedInUser) {
           fetchData(activeMenu);
         }
-      }, [activeMenu, loggedInUser]);
+      }, [activeMenu]);
+
+      const fetchAllData = async () => {
+        try {
+          const [resKas, resCor, resJim, resIbu, resMem, resLead, resTung] = await Promise.all([
+            fetch('/api/kas-gang').then(res => res.json()),
+            fetch('/api/cor-jalan').then(res => res.json()),
+            fetch('/api/jimpitan').then(res => res.json()),
+            fetch('/api/ibu-ibu').then(res => res.json()),
+            fetch('/api/members').then(res => res.json()),
+            fetch('/api/leaders').then(res => res.json()),
+            fetch('/api/tunggakan').then(res => res.json())
+          ]);
+
+          if (resKas.success) setKasGangList(resKas.data);
+          if (resCor.success) setCorJalanList(resCor.data);
+          if (resJim.success) setJimpitanList(resJim.data);
+          if (resIbu.success) setIbuIbuList(resIbu.data);
+          if (resMem.success) setMembers(resMem.data);
+          if (resLead.success) setLeaders(resLead.data);
+          if (resTung.success) setTunggakanList(resTung.data);
+        } catch (err) {
+          console.error("Gagal sinkronisasi data:", err);
+        }
+      };
 
       const fetchData = async (menu) => {
         try {
@@ -101,6 +127,20 @@
         }
       };
 
+      // Hitung Saldo Otomatis (Total Masuk dikurangi Total Keluar)
+      const hitungSaldo = (list) => {
+        return list.reduce((total, item) => {
+          const masuk = Number(item.masuk || item.nominal || 0);
+          const keluar = Number(item.keluar || 0);
+          return total + (masuk - keluar);
+        }, 0);
+      };
+
+      const totalKasGang = hitungSaldo(kasGangList);
+      const totalCorJalan = hitungSaldo(corJalanList);
+      const totalJimpitan = hitungSaldo(jimpitanList);
+      const totalIbuIbu = hitungSaldo(ibuIbuList);
+
       // Handle Login Admin
       const handleLoginAdmin = async (e) => {
         e.preventDefault();
@@ -113,13 +153,7 @@
           });
           const data = await res.json();
           if (!data.success) return setErrorMsg(data.message);
-
-          if (data.user.mustChangePassword) {
-            setIsMustChangePass(true);
-            setSuccessMsg('Login pertama berhasil. Wajib mengganti password default!');
-          } else {
-            setLoggedInUser(data.user);
-          }
+          setLoggedInUser(data.user);
         } catch (err) {
           setErrorMsg('Gagal terhubung ke server!');
         }
@@ -158,14 +192,13 @@
           });
           const data = await res.json();
           if (!data.success) return setErrorMsg(data.message);
-
           setLoggedInUser(data.user);
         } catch (err) {
           setErrorMsg('Verifikasi OTP gagal!');
         }
       };
 
-      // Handlers CRUD Leader (Hanya Admin)
+      // Handlers CRUD Pengurus
       const handleSaveLeader = async (e) => {
         e.preventDefault();
         const url = formLeader.id ? `/api/leaders/${formLeader.id}` : '/api/leaders';
@@ -186,7 +219,7 @@
         }
       };
 
-      // Handlers CRUD Nasabah/Warga (Admin & Leader)
+      // Handlers CRUD Warga
       const handleSaveMember = async (e) => {
         e.preventDefault();
         const url = formMember.id ? `/api/members/${formMember.id}` : '/api/members';
@@ -207,7 +240,7 @@
         }
       };
 
-      // Handlers Generic Modul Kas (Kas Gang, Cor Jalan, Keuangan Ibu Ibu)
+      // Handlers Modul Kas
       const handleSaveKas = async (e, routeName) => {
         e.preventDefault();
         const url = formKas.id ? `/api/${routeName}/${formKas.id}` : `/api/${routeName}`;
@@ -218,17 +251,19 @@
           body: JSON.stringify({ ...formKas, input_oleh: loggedInUser.nama })
         });
         setFormKas({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
+        fetchAllData();
         fetchData(activeMenu);
       };
 
       const handleDeleteKas = async (id, routeName) => {
         if (confirm('Hapus pencatatan ini?')) {
           await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' });
+          fetchAllData();
           fetchData(activeMenu);
         }
       };
 
-      // Handlers Modul Tunggakan (Hanya Admin Boleh Edit/Tambah)
+      // Handlers Modul Tunggakan
       const handleSaveTunggakan = async (e) => {
         e.preventDefault();
         const url = formTunggakan.id ? `/api/tunggakan/${formTunggakan.id}` : '/api/tunggakan';
@@ -295,13 +330,13 @@
                 {activeMenu === 'Dashboard' && (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-bold text-slate-700">Ringkasan Keuangan Warga</h3>
+                      <h3 className="text-lg font-bold text-slate-700">Ringkasan Keuangan Warga (Otomatis)</h3>
                       {isAdmin && (
                         <button 
                           onClick={() => setIsEditingDashboard(!isEditingDashboard)}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm transition shadow"
                         >
-                          {isEditingDashboard ? 'Selesai Edit' : 'Edit Tampilan Dashboard'}
+                          {isEditingDashboard ? 'Selesai Edit' : 'Edit Judul & Keterangan'}
                         </button>
                       )}
                     </div>
@@ -309,55 +344,19 @@
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Kas Gang</p>
-                        {isEditingDashboard ? (
-                          <input 
-                            type="number" 
-                            value={dashboardData.kasGang} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, kasGang: Number(e.target.value) })}
-                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
-                          />
-                        ) : (
-                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.kasGang.toLocaleString('id-ID')}</h3>
-                        )}
+                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalKasGang.toLocaleString('id-ID')}</h3>
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Cor Jalan</p>
-                        {isEditingDashboard ? (
-                          <input 
-                            type="number" 
-                            value={dashboardData.corJalan} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, corJalan: Number(e.target.value) })}
-                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
-                          />
-                        ) : (
-                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.corJalan.toLocaleString('id-ID')}</h3>
-                        )}
+                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalCorJalan.toLocaleString('id-ID')}</h3>
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Jimpitan</p>
-                        {isEditingDashboard ? (
-                          <input 
-                            type="number" 
-                            value={dashboardData.jimpitan} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, jimpitan: Number(e.target.value) })}
-                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
-                          />
-                        ) : (
-                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.jimpitan.toLocaleString('id-ID')}</h3>
-                        )}
+                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalJimpitan.toLocaleString('id-ID')}</h3>
                       </div>
                       <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Keuangan Ibu Ibu</p>
-                        {isEditingDashboard ? (
-                          <input 
-                            type="number" 
-                            value={dashboardData.ibuIbu} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, ibuIbu: Number(e.target.value) })}
-                            className="w-full mt-2 border rounded p-1 font-bold text-xl"
-                          />
-                        ) : (
-                          <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {dashboardData.ibuIbu.toLocaleString('id-ID')}</h3>
-                        )}
+                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {totalIbuIbu.toLocaleString('id-ID')}</h3>
                       </div>
                     </div>
 
@@ -366,28 +365,28 @@
                         <div className="space-y-3">
                           <input 
                             type="text" 
-                            value={dashboardData.judul} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, judul: e.target.value })}
+                            value={dashboardMeta.judul} 
+                            onChange={(e) => setDashboardMeta({ ...dashboardMeta, judul: e.target.value })}
                             className="w-full border rounded p-2 font-bold text-lg"
                           />
                           <textarea 
-                            value={dashboardData.deskripsi} 
-                            onChange={(e) => setDashboardData({ ...dashboardData, deskripsi: e.target.value })}
+                            value={dashboardMeta.deskripsi} 
+                            onChange={(e) => setDashboardMeta({ ...dashboardMeta, deskripsi: e.target.value })}
                             className="w-full border rounded p-2 text-sm"
                             rows="3"
                           />
                         </div>
                       ) : (
                         <>
-                          <h3 className="text-lg font-bold text-slate-700">{dashboardData.judul}</h3>
-                          <p className="text-slate-600 text-sm">{dashboardData.deskripsi}</p>
+                          <h3 className="text-lg font-bold text-slate-700">{dashboardMeta.judul}</h3>
+                          <p className="text-slate-600 text-sm">{dashboardMeta.deskripsi}</p>
                         </>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* DATA PENGURUS (Hapus & Edit oleh Admin) */}
+                {/* DATA PENGURUS */}
                 {activeMenu === 'Data Pengurus' && (
                   <div className="space-y-6">
                     {isAdmin && (
@@ -395,7 +394,7 @@
                         <h3 className="font-bold text-slate-700 mb-4">{formLeader.id ? 'Edit Data Pengurus' : 'Tambah Pengurus Baru'}</h3>
                         <form onSubmit={handleSaveLeader} className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <input type="text" placeholder="Nama Pengurus" value={formLeader.nama} onChange={e => setFormLeader({ ...formLeader, nama: e.target.value })} className="border p-2 rounded" required />
-                          <input type="text" placeholder="Jabatan (cth: Leader Kas Gang)" value={formLeader.jabatan} onChange={e => setFormLeader({ ...formLeader, jabatan: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Jabatan" value={formLeader.jabatan} onChange={e => setFormLeader({ ...formLeader, jabatan: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Nomor HP (untuk OTP)" value={formLeader.no_hp} onChange={e => setFormLeader({ ...formLeader, no_hp: e.target.value })} className="border p-2 rounded" required />
                           <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formLeader.id ? 'Perbarui' : 'Tambah'}</button>
                         </form>
@@ -432,7 +431,7 @@
                   </div>
                 )}
 
-                {/* DATA WARGA (Admin & Leader Bisa Ubah Kapanpun) */}
+                {/* DATA WARGA */}
                 {activeMenu === 'Data Warga' && (
                   <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm">
@@ -492,7 +491,7 @@
                         <input type="text" placeholder="Uraian Transaksi" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
                         <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
                         <input type="number" placeholder="Keluar (Rp)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
-                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formKas.id ? 'Update Admin' : 'Input Leader'}</button>
+                        <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formKas.id ? 'Update Admin' : 'Input Transaksi'}</button>
                       </form>
                     </div>
 
@@ -534,14 +533,14 @@
                   </div>
                 )}
 
-                {/* MODUL TUNGGAKAN (Leader & Nasabah Hanya Lihat, Admin Edit) */}
+                {/* MODUL TUNGGAKAN */}
                 {activeMenu === 'Tunggakan' && (
                   <div className="space-y-6">
                     {isAdmin && (
                       <div className="bg-white p-6 rounded-xl shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4">{formTunggakan.id ? 'Edit Data Tunggakan' : 'Catat Tunggakan Baru'}</h3>
                         <form onSubmit={handleSaveTunggakan} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <input type="text" placeholder="Nama Warga / Nasabah" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Nama Warga" value={formTunggakan.nama_nasabah} onChange={e => setFormTunggakan({ ...formTunggakan, nama_nasabah: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Jenis Iuran" value={formTunggakan.jenis_iuran} onChange={e => setFormTunggakan({ ...formTunggakan, jenis_iuran: e.target.value })} className="border p-2 rounded" required />
                           <input type="number" placeholder="Nominal Tunggakan" value={formTunggakan.jumlah_tunggakan} onChange={e => setFormTunggakan({ ...formTunggakan, jumlah_tunggakan: Number(e.target.value) })} className="border p-2 rounded" required />
                           <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">{formTunggakan.id ? 'Perbarui' : 'Simpan'}</button>
@@ -602,7 +601,6 @@
               <h2 className="text-xl font-bold tracking-wide">BUKU KAS & TABUNGAN WARGA</h2>
               <p className="text-emerald-100 text-sm mt-1">NUANSA16A C3/C8</p>
 
-              {/* Tab Switch Login */}
               <div className="flex bg-emerald-800 rounded-lg p-1 mt-4 text-xs font-semibold">
                 <button 
                   onClick={() => { setLoginMode('ADMIN'); setErrorMsg(''); setSuccessMsg(''); }}
@@ -624,7 +622,6 @@
               {successMsg && <div className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">{successMsg}</div>}
               {devOtpMsg && <div className="mb-4 bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-lg text-xs font-mono">{devOtpMsg}</div>}
 
-              {/* FORM LOGIN ADMIN */}
               {loginMode === 'ADMIN' && (
                 <form onSubmit={handleLoginAdmin} className="space-y-4">
                   <div>
@@ -639,7 +636,6 @@
                 </form>
               )}
 
-              {/* FORM LOGIN LEADER VIA OTP */}
               {loginMode === 'LEADER_OTP' && (
                 <div className="space-y-4">
                   {!otpSent ? (
