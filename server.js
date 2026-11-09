@@ -11,7 +11,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// Rute utama untuk menampilkan halaman web
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -26,20 +25,19 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
   }
 });
 
-// Skema Tabel & Seeder Otomatis
 function initDatabase() {
   db.serialize(() => {
-    // Tabel Users (Admin & User umum)
+    // Tabel Users (Admin)
     db.run(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL, -- SUPER_ADMIN, ADMIN, LEADER, NASABAH
+      role TEXT NOT NULL,
       nama TEXT NOT NULL,
       must_change_password INTEGER DEFAULT 1
     )`);
 
-    // Tabel Leader & Menyimpan Kode OTP Terakhir
+    // Tabel Pengurus (Leader) dengan OTP
     db.run(`CREATE TABLE IF NOT EXISTS leaders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nama TEXT NOT NULL,
@@ -48,17 +46,30 @@ function initDatabase() {
       pin_otp TEXT
     )`);
 
-    // Tabel Data Nasabah / Warga
+    // Tabel Warga / Nasabah (Dilengkapi kolom pin_otp untuk login warga)
     db.run(`CREATE TABLE IF NOT EXISTS members (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nik TEXT,
       nama TEXT NOT NULL,
       alamat TEXT,
-      no_hp TEXT,
-      kategori TEXT
+      no_hp TEXT UNIQUE,
+      kategori TEXT,
+      pin_otp TEXT
     )`);
 
-    // Tabel Modul Khusus: Kas Gang
+    // Tabel Iuran Bulanan Warga (Diinput oleh Pengurus)
+    db.run(`CREATE TABLE IF NOT EXISTS iuran_warga (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      warga_id INTEGER,
+      bulan TEXT NOT NULL,
+      tahun TEXT NOT NULL,
+      nominal REAL DEFAULT 0,
+      keterangan TEXT,
+      input_oleh TEXT,
+      FOREIGN KEY(warga_id) REFERENCES members(id)
+    )`);
+
+    // Tabel Modul Keuangan
     db.run(`CREATE TABLE IF NOT EXISTS kas_gang (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -68,7 +79,6 @@ function initDatabase() {
       input_oleh TEXT
     )`);
 
-    // Tabel Modul Khusus: Cor Jalan
     db.run(`CREATE TABLE IF NOT EXISTS cor_jalan (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -78,7 +88,6 @@ function initDatabase() {
       input_oleh TEXT
     )`);
 
-    // Tabel Modul Khusus: Jimpitan
     db.run(`CREATE TABLE IF NOT EXISTS jimpitan (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -88,7 +97,6 @@ function initDatabase() {
       input_oleh TEXT
     )`);
 
-    // Tabel Modul Khusus: Ibu-Ibu
     db.run(`CREATE TABLE IF NOT EXISTS ibu_ibu (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -98,7 +106,6 @@ function initDatabase() {
       input_oleh TEXT
     )`);
 
-    // Tabel Tunggakan (Hanya Admin yang bisa edit/tambah, Leader & Nasabah lihat)
     db.run(`CREATE TABLE IF NOT EXISTS tunggakan (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nama_nasabah TEXT NOT NULL,
@@ -107,7 +114,7 @@ function initDatabase() {
       status TEXT DEFAULT 'Belum Lunas'
     )`);
 
-    // Masukkan Super Admin Default
+    // Buat Akun Super Admin Default
     db.get(`SELECT * FROM users WHERE username = 'admin'`, async (err, row) => {
       if (!row) {
         const hashedPassword = await bcrypt.hash('admin123', 10);
@@ -120,213 +127,174 @@ function initDatabase() {
   });
 }
 
-// ==================== ENDPOINT AUTHENTICATION ====================
+// ==================== AUTHENTICATION (ADMIN, LEADER, WARGA) ====================
 
-// Login Standar (Admin / User)
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
-    if (err || !user) {
-      return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
-    }
+    if (err || !user) return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
     const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
-    }
+    if (!match) return res.status(400).json({ success: false, message: 'Username atau Password Salah!' });
     res.json({ success: true, user: { id: user.id, username: user.username, nama: user.nama, role: user.role } });
   });
 });
 
-// Request OTP untuk Leader Berdasarkan Nomor HP
+// Request OTP Pengurus
 app.post('/api/leader/request-otp', (req, res) => {
   const { no_hp } = req.body;
   db.get(`SELECT * FROM leaders WHERE no_hp = ?`, [no_hp], (err, leader) => {
-    if (err || !leader) {
-      return res.status(404).json({ success: false, message: 'Nomor HP Leader tidak terdaftar!' });
-    }
-    
-    // Buat Kode OTP 4 Digit Random
+    if (err || !leader) return res.status(404).json({ success: false, message: 'Nomor HP Pengurus tidak terdaftar!' });
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
-    
-    db.run(`UPDATE leaders SET pin_otp = ? WHERE no_hp = ?`, [otp, no_hp], (err) => {
-      if (err) return res.status(500).json({ success: false, message: 'Gagal memproses OTP.' });
-      
-      // Simulasi pengiriman OTP (Di dunia nyata bisa diintegrasikan dengan Fonnte/WhatsApp API)
-      console.log(`[SIMULASI KIRIM OTP] Ke Nomor ${no_hp}: KODE OTP ANDA ADALAH ${otp}`);
-      
-      res.json({ 
-        success: true, 
-        message: 'Kode OTP berhasil dikirim! (Cek console server untuk simulasi kode)',
-        dev_otp: otp // Ditampilkan untuk mempermudah pengujian Anda saat ini
-      });
+    db.run(`UPDATE leaders SET pin_otp = ? WHERE no_hp = ?`, [otp, no_hp], () => {
+      res.json({ success: true, message: 'Kode OTP berhasil dikirim!', dev_otp: otp });
     });
   });
 });
 
-// Verifikasi OTP Login Leader
 app.post('/api/leader/verify-otp', (req, res) => {
   const { no_hp, otp } = req.body;
   db.get(`SELECT * FROM leaders WHERE no_hp = ? AND pin_otp = ?`, [no_hp, otp], (err, leader) => {
-    if (err || !leader) {
-      return res.status(400).json({ success: false, message: 'Kode OTP Salah atau Kadaluarsa!' });
-    }
-    // Hapus OTP setelah sukses digunakan
+    if (err || !leader) return res.status(400).json({ success: false, message: 'Kode OTP Salah!' });
     db.run(`UPDATE leaders SET pin_otp = NULL WHERE no_hp = ?`, [no_hp]);
-    res.json({ 
-      success: true, 
-      message: 'Login OTP Berhasil!', 
-      user: { id: leader.id, nama: leader.nama, jabatan: leader.jabatan, role: 'LEADER' } 
+    res.json({ success: true, user: { id: leader.id, nama: leader.nama, jabatan: leader.jabatan, role: 'LEADER' } });
+  });
+});
+
+// Request OTP Warga (Sama seperti Pengurus)
+app.post('/api/warga/request-otp', (req, res) => {
+  const { no_hp } = req.body;
+  db.get(`SELECT * FROM members WHERE no_hp = ?`, [no_hp], (err, warga) => {
+    if (err || !warga) return res.status(404).json({ success: false, message: 'Nomor HP Warga tidak terdaftar di sistem!' });
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    db.run(`UPDATE members SET pin_otp = ? WHERE no_hp = ?`, [otp, no_hp], () => {
+      res.json({ success: true, message: 'Kode OTP Warga berhasil dikirim!', dev_otp: otp });
     });
   });
 });
 
-
-// ==================== ENDPOINT DATA LEADER (Admin Full Akses) ====================
-
-app.get('/api/leaders', (req, res) => {
-  db.all(`SELECT * FROM leaders`, [], (err, rows) => {
-    res.json({ success: true, data: rows });
+app.post('/api/warga/verify-otp', (req, res) => {
+  const { no_hp, otp } = req.body;
+  db.get(`SELECT * FROM members WHERE no_hp = ? AND pin_otp = ?`, [no_hp, otp], (err, warga) => {
+    if (err || !warga) return res.status(400).json({ success: false, message: 'Kode OTP Salah!' });
+    db.run(`UPDATE members SET pin_otp = NULL WHERE no_hp = ?`, [no_hp]);
+    res.json({ success: true, user: { id: warga.id, nama: warga.nama, no_hp: warga.no_hp, role: 'WARGA' } });
   });
 });
 
+// ==================== ENDPOINT DATA PENGURUS & WARGA ====================
+
+app.get('/api/leaders', (req, res) => {
+  db.all(`SELECT * FROM leaders`, [], (err, rows) => res.json({ success: true, data: rows }));
+});
 app.post('/api/leaders', (req, res) => {
   const { nama, jabatan, no_hp } = req.body;
   db.run(`INSERT INTO leaders (nama, jabatan, no_hp) VALUES (?, ?, ?)`, [nama, jabatan, no_hp], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah leader (Nomor HP mungkin sudah terdaftar).' });
-    res.json({ success: true, message: 'Leader berhasil ditambahkan!' });
+    if (err) return res.status(500).json({ success: false, message: 'Nomor HP sudah terdaftar.' });
+    res.json({ success: true, message: 'Pengurus berhasil ditambahkan!' });
   });
 });
-
-app.put('/api/leaders/:id', (req, res) => {
-  const { nama, jabatan, no_hp } = req.body;
-  db.run(`UPDATE leaders SET nama = ?, jabatan = ?, no_hp = ? WHERE id = ?`, [nama, jabatan, no_hp, req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal memperbarui leader.' });
-    res.json({ success: true, message: 'Data leader berhasil diperbarui!' });
-  });
-});
-
 app.delete('/api/leaders/:id', (req, res) => {
-  db.run(`DELETE FROM leaders WHERE id = ?`, [req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus leader.' });
-    res.json({ success: true, message: 'Leader berhasil dihapus!' });
-  });
+  db.run(`DELETE FROM leaders WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
-
-
-// ==================== ENDPOINT NASABAH (Admin & Leader Bisa Ubah Kapanpun) ====================
 
 app.get('/api/members', (req, res) => {
-  db.all(`SELECT * FROM members`, [], (err, rows) => {
+  db.all(`SELECT * FROM members`, [], (err, rows) => res.json({ success: true, data: rows }));
+});
+app.post('/api/members', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga (No HP mungkin kembar).' });
+    res.json({ success: true, message: 'Warga berhasil ditambahkan!' });
+  });
+});
+app.put('/api/members/:id', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  db.run(`UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ? WHERE id = ?`, [nik, nama, alamat, no_hp, kategori, req.params.id], () => res.json({ success: true }));
+});
+app.delete('/api/members/:id', (req, res) => {
+  db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
+});
+
+// ==================== ENDPOINT IURAN BULANAN WARGA ====================
+app.get('/api/iuran', (req, res) => {
+  db.all(`SELECT iuran_warga.*, members.nama as nama_warga FROM iuran_warga JOIN members ON iuran_warga.warga_id = members.id ORDER BY id DESC`, [], (err, rows) => {
     res.json({ success: true, data: rows });
   });
 });
 
-app.post('/api/members', (req, res) => {
-  const { nik, nama, alamat, no_hp, kategori } = req.body;
-  db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah nasabah.' });
-    res.json({ success: true, message: 'Nasabah berhasil ditambahkan!' });
+app.post('/api/iuran', (req, res) => {
+  const { warga_id, bulan, tahun, nominal, keterangan, input_oleh } = req.body;
+  db.run(`INSERT INTO iuran_warga (warga_id, bulan, tahun, nominal, keterangan, input_oleh) VALUES (?, ?, ?, ?, ?, ?)`, 
+    [warga_id, bulan, tahun, nominal, keterangan, input_oleh], function(err) {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan iuran.' });
+      
+      // Otomatis catat juga ke Kas Gang sebagai pemasukan kas warga bulanan
+      db.get(`SELECT nama FROM members WHERE id = ?`, [warga_id], (err, warga) => {
+        const namaWarga = warga ? warga.nama : 'Warga';
+        const uraianKas = `Iuran Bulanan (${bulan} ${tahun}) - ${namaWarga}`;
+        const tanggalHariIni = new Date().toISOString().split('T')[0];
+        
+        db.run(`INSERT INTO kas_gang (tanggal, uraian, masuk, keluar, input_oleh) VALUES (?, ?, ?, 0, ?)`,
+          [tanggalHariIni, uraianKas, nominal, input_oleh]);
+      });
+
+      res.json({ success: true, message: 'Iuran bulanan berhasil dicatat & masuk ke Kas Gang!' });
   });
 });
 
-app.put('/api/members/:id', (req, res) => {
-  const { nik, nama, alamat, no_hp, kategori } = req.body;
-  db.run(`UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ? WHERE id = ?`, [nik, nama, alamat, no_hp, kategori, req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal mengubah nasabah.' });
-    res.json({ success: true, message: 'Data nasabah berhasil diperbarui!' });
-  });
+app.delete('/api/iuran/:id', (req, res) => {
+  db.run(`DELETE FROM iuran_warga WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
-app.delete('/api/members/:id', (req, res) => {
-  db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus nasabah.' });
-    res.json({ success: true, message: 'Data nasabah berhasil dihapus!' });
-  });
-});
-
-
-// ==================== ENDPOINT MODUL KAS GANG, COR, JIMPITAN, IBU-IBU ====================
-// Fungsi umum untuk membuat template endpoint modul inputan Leader dan Edit Admin
-
+// ==================== MODUL KAS (Kas Gang, Cor Jalan, Ibu-Ibu) ====================
 function setupModuleEndpoints(routeName, tableName) {
-  // Ambil Data
   app.get(`/api/${routeName}`, (req, res) => {
-    db.all(`SELECT * FROM ${tableName} ORDER BY id DESC`, [], (err, rows) => {
-      res.json({ success: true, data: rows });
-    });
+    db.all(`SELECT * FROM ${tableName} ORDER BY id DESC`, [], (err, rows) => res.json({ success: true, data: rows }));
   });
-
-  // Leader / Admin Input Data Baru
   app.post(`/api/${routeName}`, (req, res) => {
-    const fields = Object.keys(req.body);
-    const values = Object.values(req.body);
-    const placeholders = fields.map(() => '?').join(', ');
-    
-    db.run(`INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${placeholders})`, values, function(err) {
-      if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan data.' });
-      res.json({ success: true, message: 'Data berhasil disimpan!' });
-    });
+    const { tanggal, uraian, masuk, keluar, input_oleh } = req.body;
+    db.run(`INSERT INTO ${tableName} (tanggal, uraian, masuk, keluar, input_oleh) VALUES (?, ?, ?, ?, ?)`,
+      [tanggal, uraian, masuk || 0, keluar || 0, input_oleh], function(err) {
+        if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan data.' });
+        res.json({ success: true, message: 'Data berhasil disimpan!' });
+      });
   });
-
-  // Admin Edit Data (Atau Leader yang berhak)
   app.put(`/api/${routeName}/:id`, (req, res) => {
-    const updates = Object.keys(req.body).map(key => `${key} = ?`).join(', ');
-    const values = [...Object.values(req.body), req.params.id];
-    
-    db.run(`UPDATE ${tableName} SET ${updates} WHERE id = ?`, values, function(err) {
-      if (err) return res.status(500).json({ success: false, message: 'Gagal memperbarui data.' });
-      res.json({ success: true, message: 'Data berhasil diperbarui oleh Admin!' });
-    });
+    const { tanggal, uraian, masuk, keluar } = req.body;
+    db.run(`UPDATE ${tableName} SET tanggal = ?, uraian = ?, masuk = ?, keluar = ? WHERE id = ?`,
+      [tanggal, uraian, masuk || 0, keluar || 0, req.params.id], function(err) {
+        if (err) return res.status(500).json({ success: false, message: 'Gagal update.' });
+        res.json({ success: true, message: 'Berhasil diperbarui!' });
+      });
   });
-
-  // Hanya Admin yang Bisa Hapus
   app.delete(`/api/${routeName}/:id`, (req, res) => {
-    db.run(`DELETE FROM ${tableName} WHERE id = ?`, [req.params.id], function(err) {
-      if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus data.' });
-      res.json({ success: true, message: 'Data berhasil dihapus!' });
-    });
+    db.run(`DELETE FROM ${tableName} WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
   });
 }
 
-// Terapkan ke masing-masing modul
 setupModuleEndpoints('kas-gang', 'kas_gang');
 setupModuleEndpoints('cor-jalan', 'cor_jalan');
 setupModuleEndpoints('jimpitan', 'jimpitan');
 setupModuleEndpoints('ibu-ibu', 'ibu_ibu');
 
-
-// ==================== ENDPOINT TUNGGAKAN (Hanya Admin Edit, Lainnya Lihat) ====================
-
+// ==================== TUNGGAKAN ====================
 app.get('/api/tunggakan', (req, res) => {
-  db.all(`SELECT * FROM tunggakan`, [], (err, rows) => {
-    res.json({ success: true, data: rows });
-  });
+  db.all(`SELECT * FROM tunggakan`, [], (err, rows) => res.json({ success: true, data: rows }));
 });
-
 app.post('/api/tunggakan', (req, res) => {
   const { nama_nasabah, jenis_iuran, jumlah_tunggakan, status } = req.body;
-  db.run(`INSERT INTO tunggakan (nama_nasabah, jenis_iuran, jumlah_tunggakan, status) VALUES (?, ?, ?, ?)`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah data tunggakan.' });
-    res.json({ success: true, message: 'Tunggakan berhasil dicatat!' });
+  db.run(`INSERT INTO tunggakan (nama_nasabah, jenis_iuran, jumlah_tunggakan, status) VALUES (?, ?, ?, ?)`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status], () => {
+    res.json({ success: true, message: 'Tunggakan dicatat.' });
   });
 });
-
 app.put('/api/tunggakan/:id', (req, res) => {
   const { nama_nasabah, jenis_iuran, jumlah_tunggakan, status } = req.body;
-  db.run(`UPDATE tunggakan SET nama_nasabah = ?, jenis_iuran = ?, jumlah_tunggakan = ?, status = ? WHERE id = ?`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status, req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal mengubah tunggakan.' });
-    res.json({ success: true, message: 'Data tunggakan berhasil diperbarui Admin!' });
-  });
+  db.run(`UPDATE tunggakan SET nama_nasabah = ?, jenis_iuran = ?, jumlah_tunggakan = ?, status = ? WHERE id = ?`, [nama_nasabah, jenis_iuran, jumlah_tunggakan, status, req.params.id], () => res.json({ success: true }));
 });
-
 app.delete('/api/tunggakan/:id', (req, res) => {
-  db.run(`DELETE FROM tunggakan WHERE id = ?`, [req.params.id], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menghapus tunggakan.' });
-    res.json({ success: true, message: 'Tunggakan dihapus.' });
-  });
+  db.run(`DELETE FROM tunggakan WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
-// Jalankan Server
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 });
