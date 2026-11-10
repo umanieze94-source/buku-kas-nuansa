@@ -47,6 +47,7 @@
       const [leaders, setLeaders] = useState([]);
       const [members, setMembers] = useState([]);
       const [iuranList, setIuranList] = useState([]);
+      const [agendaList, setAgendaList] = useState([]);
       const [kasGangList, setKasGangList] = useState([]);
       const [corJalanList, setCorJalanList] = useState([]);
       const [jimpitanList, setJimpitanList] = useState([]);
@@ -54,6 +55,7 @@
 
       const [formMember, setFormMember] = useState({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
       const [formLeader, setFormLeader] = useState({ id: null, nama: '', jabatan: '', no_hp: '', pic_modul: 'Kas Gang' });
+      const [formAgenda, setFormAgenda] = useState({ tanggal: '', waktu: '', nama_kegiatan: '', lokasi: '', keterangan: '' });
       const [formIuran, setFormIuran] = useState({ warga_id: '', bulan: 'Januari', tahun: '2026', nominal: 0, keterangan: 'Iuran Bulanan' });
       const [formKas, setFormKas] = useState({ id: null, tanggal: '', uraian: '', nama_warga: '', masuk: 0, keluar: 0 });
 
@@ -67,14 +69,15 @@
 
       const fetchAllData = async () => {
         try {
-          const [resKas, resCor, resJim, resIbu, resMem, resLead, resIur] = await Promise.all([
+          const [resKas, resCor, resJim, resIbu, resMem, resLead, resIur, resAgenda] = await Promise.all([
             fetch('/api/kas-gang').then(res => res.json()),
             fetch('/api/cor-jalan').then(res => res.json()),
             fetch('/api/jimpitan').then(res => res.json()),
             fetch('/api/ibu-ibu').then(res => res.json()),
             fetch('/api/members').then(res => res.json()),
             fetch('/api/leaders').then(res => res.json()),
-            fetch('/api/iuran').then(res => res.json())
+            fetch('/api/iuran').then(res => res.json()),
+            fetch('/api/agenda').then(res => res.json())
           ]);
 
           if (resKas.success) setKasGangList(resKas.data);
@@ -84,6 +87,7 @@
           if (resMem.success) setMembers(resMem.data);
           if (resLead.success) setLeaders(resLead.data);
           if (resIur.success) setIuranList(resIur.data);
+          if (resAgenda.success) setAgendaList(resAgenda.data);
         } catch (err) {
           console.error("Gagal sinkronisasi data:", err);
         }
@@ -100,6 +104,9 @@
         } else if (menu === 'Data Pengurus') {
           const res = await fetch('/api/leaders').then(r => r.json());
           if (res.success) setLeaders(res.data);
+        } else if (menu === 'Agenda Gang') {
+          const res = await fetch('/api/agenda').then(r => r.json());
+          if (res.success) setAgendaList(res.data);
         } else if (menu === 'Kas Gang') {
           const res = await fetch('/api/kas-gang').then(r => r.json());
           if (res.success) setKasGangList(res.data);
@@ -210,6 +217,24 @@
         }
       };
 
+      const handleSaveAgenda = async (e) => {
+        e.preventDefault();
+        await fetch('/api/agenda', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formAgenda, input_oleh: loggedInUser.nama })
+        }).then(() => {
+          setFormAgenda({ tanggal: '', waktu: '', nama_kegiatan: '', lokasi: '', keterangan: '' });
+          fetchAllData();
+          fetchData('Agenda Gang');
+        });
+      };
+
+      const handleDeleteAgenda = async (id) => {
+        if (confirm('Hapus agenda kegiatan ini?')) {
+          await fetch(`/api/agenda/${id}`, { method: 'DELETE' }).then(() => { fetchAllData(); fetchData('Agenda Gang'); });
+        }
+      };
+
       const handleSaveIuran = async (e) => {
         e.preventDefault();
         await fetch('/api/iuran', {
@@ -246,7 +271,7 @@
       const isAdmin = loggedInUser?.role === 'SUPER_ADMIN' || loggedInUser?.role === 'ADMIN';
       const isWarga = loggedInUser?.role === 'WARGA';
 
-      const menuList = ['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus'];
+      const menuList = ['Dashboard', 'Agenda Gang', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus'];
       if (isAdmin) menuList.push('Revisi');
 
       if (loggedInUser) {
@@ -336,6 +361,59 @@
                         <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Ibu Ibu</p>
                         <h3 className="text-xl md:text-2xl font-bold text-slate-800 mt-2">Rp {totalIbuIbu.toLocaleString('id-ID')}</h3>
                         <p className="text-xs text-emerald-600 mt-1 font-medium">PIC: {leaders.find(l => l.pic_modul === 'Keuangan Ibu Ibu')?.nama || 'Belum Ditentukan'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MENU AGENDA GANG */}
+                {activeMenu === 'Agenda Gang' && (
+                  <div className="space-y-6">
+                    {!isWarga && (
+                      <div className="bg-white/95 backdrop-blur p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-4 text-sm md:text-base">Input Agenda / Kegiatan Warga</h3>
+                        <form onSubmit={handleSaveAgenda} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+                          <input type="date" value={formAgenda.tanggal} onChange={e => setFormAgenda({ ...formAgenda, tanggal: e.target.value })} className="border p-2 rounded text-sm" required />
+                          <input type="text" placeholder="Waktu (cth: 19:30 WIB)" value={formAgenda.waktu} onChange={e => setFormAgenda({ ...formAgenda, waktu: e.target.value })} className="border p-2 rounded text-sm" />
+                          <input type="text" placeholder="Nama Kegiatan" value={formAgenda.nama_kegiatan} onChange={e => setFormAgenda({ ...formAgenda, nama_kegiatan: e.target.value })} className="border p-2 rounded text-sm" required />
+                          <input type="text" placeholder="Lokasi (cth: Pos Ronda RT 44)" value={formAgenda.lokasi} onChange={e => setFormAgenda({ ...formAgenda, lokasi: e.target.value })} className="border p-2 rounded text-sm" />
+                          <input type="text" placeholder="Keterangan / Catatan" value={formAgenda.keterangan} onChange={e => setFormAgenda({ ...formAgenda, keterangan: e.target.value })} className="border p-2 rounded text-sm" />
+                          <button type="submit" className="sm:col-span-2 lg:col-span-5 bg-emerald-600 text-white rounded p-2.5 hover:bg-emerald-700 font-medium text-sm">Simpan Agenda Kegiatan</button>
+                        </form>
+                      </div>
+                    )}
+
+                    <div className="bg-white/95 backdrop-blur p-4 md:p-6 rounded-xl shadow-sm">
+                      <h3 className="font-bold text-slate-700 mb-3 text-sm md:text-base">Jadwal & Agenda Kegiatan Warga Nuansa16A</h3>
+                      <div className="table-responsive">
+                        <table className="w-full text-left text-sm border-collapse min-w-[600px]">
+                          <thead>
+                            <tr className="border-b bg-slate-50">
+                              <th className="p-3">Tanggal & Waktu</th>
+                              <th className="p-3">Nama Kegiatan</th>
+                              <th className="p-3">Lokasi</th>
+                              <th className="p-3">Keterangan</th>
+                              <th className="p-3">Penginput</th>
+                              {!isWarga && <th className="p-3 text-right">Aksi</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {agendaList.map(a => (
+                              <tr key={a.id} className="border-b hover:bg-slate-50">
+                                <td className="p-3 font-medium">{a.tanggal} <br/><span className="text-xs text-slate-500">{a.waktu}</span></td>
+                                <td className="p-3 font-bold text-emerald-800">{a.nama_kegiatan}</td>
+                                <td className="p-3">{a.lokasi}</td>
+                                <td className="p-3">{a.keterangan}</td>
+                                <td className="p-3 text-slate-500">{a.input_oleh}</td>
+                                {!isWarga && (
+                                  <td className="p-3 text-right">
+                                    <button onClick={() => handleDeleteAgenda(a.id)} className="bg-rose-600 text-white px-3 py-1 rounded text-xs hover:bg-rose-700">Hapus</button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
