@@ -3,6 +3,8 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +12,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+const upload = multer({ dest: 'uploads/' });
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -65,7 +69,6 @@ function initDatabase() {
       FOREIGN KEY(warga_id) REFERENCES members(id)
     )`);
 
-    // Tabel Baru: Agenda Gang
     db.run(`CREATE TABLE IF NOT EXISTS agenda_gang (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -124,6 +127,33 @@ function initDatabase() {
     });
   });
 }
+
+// BACKUP & RESTORE ENDPOINTS
+app.get('/api/admin/backup', (req, res) => {
+  const file = path.join(__dirname, 'database.sqlite');
+  if (fs.existsSync(file)) {
+    res.download(file, `backup-database-${new Date().toISOString().split('T')[0]}.sqlite`);
+  } else {
+    res.status(404).json({ success: false, message: 'File database belum tersedia.' });
+  }
+});
+
+app.post('/api/admin/restore', upload.single('database_file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'Tidak ada file backup yang diunggah.' });
+  }
+
+  const targetPath = path.join(__dirname, 'database.sqlite');
+  
+  fs.copyFile(req.file.path, targetPath, (err) => {
+    fs.unlink(req.file.path, () => {}); // Hapus file temporary
+    if (err) {
+      res.status(500).json({ success: false, message: 'Gagal memulihkan database.' });
+    } else {
+      res.json({ success: true, message: 'Database berhasil dipulihkan! Silakan muat ulang halaman.' });
+    }
+  });
+});
 
 // AUTH
 app.post('/api/login', (req, res) => {
