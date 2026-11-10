@@ -128,7 +128,9 @@ function initDatabase() {
   });
 }
 
-// BACKUP & RESTORE ENDPOINTS
+// ==========================================
+// FITUR BACKUP & RESTORE DATABASE AMAN & GRATIS
+// ==========================================
 app.get('/api/admin/backup', (req, res) => {
   const file = path.join(__dirname, 'database.sqlite');
   if (fs.existsSync(file)) {
@@ -146,7 +148,7 @@ app.post('/api/admin/restore', upload.single('database_file'), (req, res) => {
   const targetPath = path.join(__dirname, 'database.sqlite');
   
   fs.copyFile(req.file.path, targetPath, (err) => {
-    fs.unlink(req.file.path, () => {}); // Hapus file temporary
+    fs.unlink(req.file.path, () => {}); // Hapus file temporary upload
     if (err) {
       res.status(500).json({ success: false, message: 'Gagal memulihkan database.' });
     } else {
