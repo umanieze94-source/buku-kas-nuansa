@@ -93,6 +93,14 @@
         }
       };
 
+      const hitungSaldo = (list) => {
+        if (!Array.isArray(list)) return 0;
+        return list.reduce((total, item) => {
+          const masuk = Number(item.masuk || item.nominal || 0);
+          const keluar = Number(item.keluar || 0);
+          return total + (masuk - keluar);
+        }, 0);
+      };
       const fetchData = async (menu) => {
         if (menu === 'Data Warga') {
           const [resMem, resIur] = await Promise.all([
