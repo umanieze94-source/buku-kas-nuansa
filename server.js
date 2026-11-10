@@ -65,6 +65,17 @@ function initDatabase() {
       FOREIGN KEY(warga_id) REFERENCES members(id)
     )`);
 
+    // Tabel Baru: Agenda Gang
+    db.run(`CREATE TABLE IF NOT EXISTS agenda_gang (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      waktu TEXT,
+      nama_kegiatan TEXT NOT NULL,
+      lokasi TEXT,
+      keterangan TEXT,
+      input_oleh TEXT
+    )`);
+
     db.run(`CREATE TABLE IF NOT EXISTS kas_gang (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tanggal TEXT NOT NULL,
@@ -172,7 +183,7 @@ app.get('/api/members', (req, res) => {
 app.post('/api/members', (req, res) => {
   const { nik, nama, alamat, no_hp, kategori } = req.body;
   db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga (No HP mungkin sudah terdaftar).' });
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga.' });
     res.json({ success: true, message: 'Data warga berhasil ditambahkan!' });
   });
 });
@@ -184,15 +195,15 @@ app.delete('/api/members/:id', (req, res) => {
   db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
-// LEADERS (PENGURUS & PIC MODUL)
+// LEADERS
 app.get('/api/leaders', (req, res) => {
   db.all(`SELECT * FROM leaders`, [], (err, rows) => res.json({ success: true, data: rows }));
 });
 app.post('/api/leaders', (req, res) => {
   const { nama, jabatan, no_hp, pic_modul } = req.body;
   db.run(`INSERT INTO leaders (nama, jabatan, no_hp, pic_modul) VALUES (?, ?, ?, ?)`, [nama, jabatan, no_hp, pic_modul || 'Kas Gang'], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Nomor HP pengurus sudah terdaftar.' });
-    res.json({ success: true, message: 'Data pengurus dan PIC berhasil ditambahkan!' });
+    if (err) return res.status(500).json({ success: false, message: 'Nomor HP sudah terdaftar.' });
+    res.json({ success: true, message: 'Data pengurus berhasil ditambahkan!' });
   });
 });
 app.put('/api/leaders/:id', (req, res) => {
@@ -201,6 +212,22 @@ app.put('/api/leaders/:id', (req, res) => {
 });
 app.delete('/api/leaders/:id', (req, res) => {
   db.run(`DELETE FROM leaders WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
+});
+
+// AGENDA GANG
+app.get('/api/agenda', (req, res) => {
+  db.all(`SELECT * FROM agenda_gang ORDER BY tanggal DESC`, [], (err, rows) => res.json({ success: true, data: rows }));
+});
+app.post('/api/agenda', (req, res) => {
+  const { tanggal, waktu, nama_kegiatan, lokasi, keterangan, input_oleh } = req.body;
+  db.run(`INSERT INTO agenda_gang (tanggal, waktu, nama_kegiatan, lokasi, keterangan, input_oleh) VALUES (?, ?, ?, ?, ?, ?)`,
+    [tanggal, waktu || '-', nama_kegiatan, lokasi || '-', keterangan || '-', input_oleh], function(err) {
+      if (err) return res.status(500).json({ success: false, message: 'Gagal menyimpan agenda.' });
+      res.json({ success: true, message: 'Agenda kegiatan berhasil dicatat!' });
+    });
+});
+app.delete('/api/agenda/:id', (req, res) => {
+  db.run(`DELETE FROM agenda_gang WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
 // IURAN
