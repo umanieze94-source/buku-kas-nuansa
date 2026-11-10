@@ -171,7 +171,26 @@ app.post('/api/warga/verify-otp', (req, res) => {
   });
 });
 
-// MEMBERS & LEADERS
+// MEMBERS (DATA WARGA)
+app.get('/api/members', (req, res) => {
+  db.all(`SELECT * FROM members`, [], (err, rows) => res.json({ success: true, data: rows }));
+});
+app.post('/api/members', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
+    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga (No HP mungkin sudah terdaftar).' });
+    res.json({ success: true, message: 'Data warga berhasil ditambahkan!' });
+  });
+});
+app.put('/api/members/:id', (req, res) => {
+  const { nik, nama, alamat, no_hp, kategori } = req.body;
+  db.run(`UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ? WHERE id = ?`, [nik, nama, alamat, no_hp, kategori, req.params.id], () => res.json({ success: true }));
+});
+app.delete('/api/members/:id', (req, res) => {
+  db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
+});
+
+// LEADERS
 app.get('/api/leaders', (req, res) => {
   db.all(`SELECT * FROM leaders`, [], (err, rows) => res.json({ success: true, data: rows }));
 });
@@ -184,24 +203,6 @@ app.post('/api/leaders', (req, res) => {
 });
 app.delete('/api/leaders/:id', (req, res) => {
   db.run(`DELETE FROM leaders WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
-});
-
-app.get('/api/members', (req, res) => {
-  db.all(`SELECT * FROM members`, [], (err, rows) => res.json({ success: true, data: rows }));
-});
-app.post('/api/members', (req, res) => {
-  const { nik, nama, alamat, no_hp, kategori } = req.body;
-  db.run(`INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)`, [nik, nama, alamat, no_hp, kategori], function(err) {
-    if (err) return res.status(500).json({ success: false, message: 'Gagal menambah warga.' });
-    res.json({ success: true, message: 'Warga berhasil ditambahkan!' });
-  });
-});
-app.put('/api/members/:id', (req, res) => {
-  const { nik, nama, alamat, no_hp, kategori } = req.body;
-  db.run(`UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ? WHERE id = ?`, [nik, nama, alamat, no_hp, kategori, req.params.id], () => res.json({ success: true }));
-});
-app.delete('/api/members/:id', (req, res) => {
-  db.run(`DELETE FROM members WHERE id = ?`, [req.params.id], () => res.json({ success: true }));
 });
 
 // IURAN
