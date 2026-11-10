@@ -213,7 +213,6 @@
         });
       };
 
-      // Fungsi khusus Admin untuk Revisi / Hapus Data Salah Input
       const handleRevisiHapus = async (id, routeName) => {
         if (confirm(`ADMIN REVISI: Yakin ingin menghapus data dari ${routeName}? Transaksi ini akan dibatalkan.`)) {
           await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' });
@@ -224,7 +223,6 @@
       const isAdmin = loggedInUser?.role === 'SUPER_ADMIN' || loggedInUser?.role === 'ADMIN';
       const isWarga = loggedInUser?.role === 'WARGA';
 
-      // Daftar Menu Navigasi (Menu Revisi Hanya Ditampilkan Jika Admin Login)
       const menuList = ['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Keuangan Ibu Ibu', 'Data Warga', 'Data Pengurus', 'Tunggakan'];
       if (isAdmin) menuList.push('Revisi');
 
@@ -258,7 +256,17 @@
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
               <header className="bg-white shadow-sm h-16 flex items-center justify-between px-8 border-b border-slate-200">
-                <h2 className="text-xl font-bold text-emerald-800">{activeMenu}</h2>
+                <div className="flex items-center space-x-4">
+                  {activeMenu !== 'Dashboard' && (
+                    <button 
+                      onClick={() => setActiveMenu('Dashboard')} 
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-sm"
+                    >
+                      ← Kembali
+                    </button>
+                  )}
+                  <h2 className="text-xl font-bold text-emerald-800">{activeMenu}</h2>
+                </div>
                 <div className="text-sm text-slate-600">
                   Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role})
                 </div>
