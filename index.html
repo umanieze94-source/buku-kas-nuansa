@@ -30,11 +30,6 @@
       const [successMsg, setSuccessMsg] = useState('');
       const [activeMenu, setActiveMenu] = useState('Dashboard');
 
-      const [dashboardMeta, setDashboardMeta] = useState({
-        judul: 'Ringkasan Aktivitas Keuangan Real-Time',
-        deskripsi: 'Sistem otomatis terintegrasi dengan pencatatan iuran warga dan kas gang.'
-      });
-
       const [leaders, setLeaders] = useState([]);
       const [members, setMembers] = useState([]);
       const [iuranList, setIuranList] = useState([]);
@@ -44,7 +39,6 @@
       const [ibuIbuList, setIbuIbuList] = useState([]);
       const [tunggakanList, setTunggakanList] = useState([]);
 
-      const [formLeader, setFormLeader] = useState({ id: null, nama: '', jabatan: '', no_hp: '' });
       const [formMember, setFormMember] = useState({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' });
       const [formIuran, setFormIuran] = useState({ warga_id: '', bulan: 'Januari', tahun: '2026', nominal: 0, keterangan: 'Iuran Bulanan' });
       const [formKas, setFormKas] = useState({ id: null, tanggal: '', uraian: '', masuk: 0, keluar: 0 });
@@ -84,10 +78,7 @@
       };
 
       const fetchData = async (menu) => {
-        if (menu === 'Data Pengurus') {
-          const res = await fetch('/api/leaders').then(r => r.json());
-          if (res.success) setLeaders(res.data);
-        } else if (menu === 'Data Warga') {
+        if (menu === 'Data Warga') {
           const [resMem, resIur] = await Promise.all([
             fetch('/api/members').then(r => r.json()),
             fetch('/api/iuran').then(r => r.json())
@@ -167,16 +158,6 @@
         setLoggedInUser(res.user);
       };
 
-      const handleSaveLeader = async (e) => {
-        e.preventDefault();
-        const url = formLeader.id ? `/api/leaders/${formLeader.id}` : '/api/leaders';
-        await fetch(url, {
-          method: formLeader.id ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formLeader)
-        }).then(() => { setFormLeader({ id: null, nama: '', jabatan: '', no_hp: '' }); fetchData('Data Pengurus'); });
-      };
-
       const handleSaveMember = async (e) => {
         e.preventDefault();
         const url = formMember.id ? `/api/members/${formMember.id}` : '/api/members';
@@ -184,7 +165,17 @@
           method: formMember.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formMember)
-        }).then(() => { setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' }); fetchData('Data Warga'); });
+        }).then(() => { 
+          setFormMember({ id: null, nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap' }); 
+          fetchAllData();
+          fetchData('Data Warga'); 
+        });
+      };
+
+      const handleDeleteMember = async (id) => {
+        if (confirm('Yakin ingin menghapus data warga ini?')) {
+          await fetch(`/api/members/${id}`, { method: 'DELETE' }).then(() => { fetchAllData(); fetchData('Data Warga'); });
+        }
       };
 
       const handleSaveIuran = async (e) => {
@@ -214,7 +205,7 @@
       };
 
       const handleRevisiHapus = async (id, routeName) => {
-        if (confirm(`ADMIN REVISI: Yakin ingin menghapus data dari ${routeName}? Transaksi ini akan dibatalkan.`)) {
+        if (confirm(`ADMIN REVISI: Yakin ingin menghapus data dari ${routeName}?`)) {
           await fetch(`/api/${routeName}/${id}`, { method: 'DELETE' });
           fetchAllData();
         }
@@ -300,13 +291,12 @@
                   </div>
                 )}
 
-                {/* MENU KHUSUS REVISI ADMIN */}
+                {/* MENU REVISI ADMIN */}
                 {activeMenu === 'Revisi' && isAdmin && (
                   <div className="space-y-6">
                     <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-800 text-sm">
-                      <strong>Pusat Koreksi Data Admin:</strong> Di halaman ini Anda dapat menghapus atau meralat transaksi yang salah input oleh pengurus dari semua modul.
+                      <strong>Pusat Koreksi Data Admin:</strong> Hapus transaksi yang salah input oleh pengurus.
                     </div>
-
                     <div className="bg-white p-6 rounded-xl shadow-sm space-y-4">
                       <h3 className="font-bold text-slate-700">Revisi Transaksi Kas Gang</h3>
                       <table className="w-full text-left text-sm border-collapse">
@@ -316,8 +306,7 @@
                             <th className="p-2">Uraian</th>
                             <th className="p-2">Masuk</th>
                             <th className="p-2">Keluar</th>
-                            <th className="p-2">Penginput</th>
-                            <th className="p-2 text-right">Aksi Hapus</th>
+                            <th className="p-2 text-right">Aksi</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -327,65 +316,8 @@
                               <td className="p-2">{item.uraian}</td>
                               <td className="p-2 text-emerald-600">Rp {(item.masuk || 0).toLocaleString('id-ID')}</td>
                               <td className="p-2 text-rose-600">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-2">{item.input_oleh}</td>
                               <td className="p-2 text-right">
-                                <button onClick={() => handleRevisiHapus(item.id, 'kas-gang')} className="bg-rose-600 text-white px-3 py-1 rounded text-xs hover:bg-rose-700">Hapus Transaksi</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm space-y-4">
-                      <h3 className="font-bold text-slate-700">Revisi Transaksi Cor Jalan</h3>
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b bg-slate-50">
-                            <th className="p-2">Tanggal</th>
-                            <th className="p-2">Uraian</th>
-                            <th className="p-2">Masuk</th>
-                            <th className="p-2">Keluar</th>
-                            <th className="p-2 text-right">Aksi Hapus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {corJalanList.map(item => (
-                            <tr key={item.id} className="border-b hover:bg-slate-50">
-                              <td className="p-2">{item.tanggal}</td>
-                              <td className="p-2">{item.uraian}</td>
-                              <td className="p-2 text-emerald-600">Rp {(item.masuk || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-2 text-rose-600">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-2 text-right">
-                                <button onClick={() => handleRevisiHapus(item.id, 'cor-jalan')} className="bg-rose-600 text-white px-3 py-1 rounded text-xs hover:bg-rose-700">Hapus Transaksi</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm space-y-4">
-                      <h3 className="font-bold text-slate-700">Revisi Transaksi Keuangan Ibu Ibu</h3>
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b bg-slate-50">
-                            <th className="p-2">Tanggal</th>
-                            <th className="p-2">Uraian</th>
-                            <th className="p-2">Masuk</th>
-                            <th className="p-2">Keluar</th>
-                            <th className="p-2 text-right">Aksi Hapus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ibuIbuList.map(item => (
-                            <tr key={item.id} className="border-b hover:bg-slate-50">
-                              <td className="p-2">{item.tanggal}</td>
-                              <td className="p-2">{item.uraian}</td>
-                              <td className="p-2 text-emerald-600">Rp {(item.masuk || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-2 text-rose-600">Rp {(item.keluar || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-2 text-right">
-                                <button onClick={() => handleRevisiHapus(item.id, 'ibu-ibu')} className="bg-rose-600 text-white px-3 py-1 rounded text-xs hover:bg-rose-700">Hapus Transaksi</button>
+                                <button onClick={() => handleRevisiHapus(item.id, 'kas-gang')} className="bg-rose-600 text-white px-3 py-1 rounded text-xs hover:bg-rose-700">Hapus</button>
                               </td>
                             </tr>
                           ))}
@@ -405,7 +337,7 @@
                           <input type="date" value={formKas.tanggal} onChange={e => setFormKas({ ...formKas, tanggal: e.target.value })} className="border p-2 rounded" required />
                           <input type="text" placeholder="Uraian" value={formKas.uraian} onChange={e => setFormKas({ ...formKas, uraian: e.target.value })} className="border p-2 rounded" required />
                           <input type="number" placeholder="Masuk (Rp)" value={formKas.masuk} onChange={e => setFormKas({ ...formKas, masuk: Number(e.target.value) })} className="border p-2 rounded" />
-                          <input type="number" placeholder="Keluar (Pengeluaran)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
+                          <input type="number" placeholder="Keluar (Rp)" value={formKas.keluar} onChange={e => setFormKas({ ...formKas, keluar: Number(e.target.value) })} className="border p-2 rounded" />
                           <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700">Simpan Transaksi</button>
                         </form>
                       </div>
@@ -438,9 +370,28 @@
                   </div>
                 )}
 
-                {/* DATA WARGA & DATA PENGURUS */}
+                {/* MENU DATA WARGA & MONITORING TAGIHAN */}
                 {activeMenu === 'Data Warga' && (
                   <div className="space-y-6">
+                    {/* FORM INPUT DATA WARGA KHUSUS ADMIN */}
+                    {isAdmin && (
+                      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-4">{formMember.id ? 'Edit Data Warga' : 'Form Input Data Warga Baru (Admin)'}</h3>
+                        <form onSubmit={handleSaveMember} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <input type="text" placeholder="NIK" value={formMember.nik} onChange={e => setFormMember({ ...formMember, nik: e.target.value })} className="border p-2 rounded" />
+                          <input type="text" placeholder="Nama Lengkap Warga" value={formMember.nama} onChange={e => setFormMember({ ...formMember, nama: e.target.value })} className="border p-2 rounded" required />
+                          <input type="text" placeholder="Alamat / Blok Rumah" value={formMember.alamat} onChange={e => setFormMember({ ...formMember, alamat: e.target.value })} className="border p-2 rounded" />
+                          <input type="text" placeholder="Nomor HP (untuk Login OTP Warga)" value={formMember.no_hp} onChange={e => setFormMember({ ...formMember, no_hp: e.target.value })} className="border p-2 rounded" required />
+                          <select value={formMember.kategori} onChange={e => setFormMember({ ...formMember, kategori: e.target.value })} className="border p-2 rounded">
+                            <option value="Warga Tetap">Warga Tetap</option>
+                            <option value="Warga Kontrak">Warga Kontrak</option>
+                          </select>
+                          <button type="submit" className="bg-emerald-600 text-white rounded p-2 hover:bg-emerald-700 font-medium">Simpan Data Warga</button>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* FORM INPUT IURAN BULANAN (Pengurus & Admin) */}
                     {!isWarga && (
                       <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl shadow-sm">
                         <h3 className="font-bold text-emerald-800 mb-4">Input Iuran Bulanan Warga</h3>
@@ -459,28 +410,74 @@
                       </div>
                     )}
 
-                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
-                      <h3 className="font-bold text-slate-700 mb-3">Daftar Warga & Log Iuran Bulanan</h3>
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b bg-slate-50">
-                            <th className="p-3">Nama Warga</th>
-                            <th className="p-3">Bulan / Tahun</th>
-                            <th className="p-3 text-emerald-600">Nominal</th>
-                            <th className="p-3">Input Oleh</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {iuranList.map(i => (
-                            <tr key={i.id} className="border-b hover:bg-slate-50">
-                              <td className="p-3 font-medium">{i.nama_warga}</td>
-                              <td className="p-3">{i.bulan} {i.tahun}</td>
-                              <td className="p-3 text-emerald-600 font-bold">Rp {(i.nominal || 0).toLocaleString('id-ID')}</td>
-                              <td className="p-3 text-slate-500">{i.input_oleh}</td>
+                    {/* MONITORING DAFTAR WARGA & STATUS TAGIHAN */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm overflow-x-auto space-y-6">
+                      <div>
+                        <h3 className="font-bold text-slate-700 mb-3">Monitoring Data Warga & Status Tagihan Aktif</h3>
+                        <table className="w-full text-left text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b bg-slate-50">
+                              <th className="p-3">Nama Warga</th>
+                              <th className="p-3">Alamat</th>
+                              <th className="p-3">No HP (Login)</th>
+                              <th className="p-3">Kategori</th>
+                              <th className="p-3">Status Iuran Terbaru</th>
+                              {isAdmin && <th className="p-3 text-right">Aksi</th>}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {members.map(m => {
+                              const riwayatWarga = iuranList.filter(i => i.warga_id === m.id);
+                              const sudahBayarBulanIni = riwayatWarga.length > 0;
+                              return (
+                                <tr key={m.id} className="border-b hover:bg-slate-50">
+                                  <td className="p-3 font-medium">{m.nama}</td>
+                                  <td className="p-3">{m.alamat}</td>
+                                  <td className="p-3">{m.no_hp}</td>
+                                  <td className="p-3">{m.kategori}</td>
+                                  <td className="p-3">
+                                    {sudahBayarBulanIni ? (
+                                      <span className="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-semibold">Lunas ({riwayatWarga.length} Kali Bayar)</span>
+                                    ) : (
+                                      <span className="bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full text-xs font-semibold">Belum Ada Catatan Iuran</span>
+                                    )}
+                                  </td>
+                                  {isAdmin && (
+                                    <td className="p-3 text-right space-x-2">
+                                      <button onClick={() => setFormMember(m)} className="text-amber-600 font-semibold hover:underline">Edit</button>
+                                      <button onClick={() => handleDeleteMember(m.id)} className="text-rose-600 font-semibold hover:underline">Hapus</button>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div>
+                        <h3 className="font-bold text-slate-700 mb-3">Log Riwayat Pembayaran Iuran Warga</h3>
+                        <table className="w-full text-left text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b bg-slate-50">
+                              <th className="p-3">Nama Warga</th>
+                              <th className="p-3">Periode Bulan / Tahun</th>
+                              <th className="p-3 text-emerald-600">Nominal</th>
+                              <th className="p-3">Dicatat Oleh</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {iuranList.map(i => (
+                              <tr key={i.id} className="border-b hover:bg-slate-50">
+                                <td className="p-3 font-medium">{i.nama_warga}</td>
+                                <td className="p-3">{i.bulan} {i.tahun}</td>
+                                <td className="p-3 text-emerald-600 font-bold">Rp {(i.nominal || 0).toLocaleString('id-ID')}</td>
+                                <td className="p-3 text-slate-500">{i.input_oleh}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -546,6 +543,8 @@
                 </div>
               )}
 
+              {login_mode_warga_otp_handling...}
+
               {loginMode === 'WARGA_OTP' && (
                 <div className="space-y-4">
                   {!otpSent ? (
@@ -573,7 +572,7 @@
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    ReactDOM.createRoot(default = document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
