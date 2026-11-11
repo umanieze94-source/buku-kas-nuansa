@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -8,235 +9,560 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { margin: 0; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
-  <div id="root"></div>
+<div id="root"></div>
 
-  <script type="text/babel">
-    const { useState } = React;
+<script type="text/babel">
+const {useState, useEffect} = React;
 
-    function App() {
-      const [username, setUsername] = useState('');
-      const [password, setPassword] = useState('');
-      const [newPassword, setNewPassword] = useState('');
-      const [isMustChangePass, setIsMustChangePass] = useState(false);
-      const [loggedInUser, setLoggedInUser] = useState(null);
-      const [errorMsg, setErrorMsg] = useState('');
-      const [successMsg, setSuccessMsg] = useState('');
-      const [activeMenu, setActiveMenu] = useState('Dashboard');
+const STORAGE_KEY = "NUANSA16A_DATABASE_V1";
+const MENUS = [
+  "Dashboard", "Kas Gang", "Cor Jalan", "Jimpitan",
+  "Ibu-Ibu", "Data Nasabah", "Data Leader", "Tunggakan",
+  "Laporan", "Riwayat Transaksi", "Audit Log",
+  "Backup Data", "Restore Data", "Pengaturan"
+];
 
-      const handleLogin = async (e) => {
-        e.preventDefault();
-        setErrorMsg('');
-        setSuccessMsg('');
+const DEFAULT_DB = {
+  version: 1,
+  transactions: [],
+  nasabah: [],
+  leaders: [],
+  settings: {
+    nama: "NUANSA16A C3/C8",
+    saldoAwal: {
+      "Kas Gang": 4500000,
+      "Cor Jalan": 12800000,
+      "Jimpitan": 1750000,
+      "Ibu-Ibu": 3200000
+    }
+  },
+  audit: []
+};
 
-        try {
-          const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-          });
-          const data = await response.json();
-
-          if (!data.success) {
-            setErrorMsg(data.message);
-            return;
-          }
-
-          if (data.user.mustChangePassword) {
-            setIsMustChangePass(true);
-            setSuccessMsg('Login pertama berhasil. Wajib mengganti password default!');
-          } else {
-            setLoggedInUser(data.user);
-          }
-        } catch (err) {
-          setErrorMsg('Gagal terhubung ke server Node.js!');
+function loadDatabase() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return structuredClone(DEFAULT_DB);
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_DB,
+      ...parsed,
+      settings: {
+        ...DEFAULT_DB.settings,
+        ...(parsed.settings || {}),
+        saldoAwal: {
+          ...DEFAULT_DB.settings.saldoAwal,
+          ...(parsed.settings?.saldoAwal || {})
         }
-      };
+      },
+      transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+      nasabah: Array.isArray(parsed.nasabah) ? parsed.nasabah : [],
+      leaders: Array.isArray(parsed.leaders) ? parsed.leaders : [],
+      audit: Array.isArray(parsed.audit) ? parsed.audit : []
+    };
+  } catch (error) {
+    console.error("Database gagal dibaca:", error);
+    return structuredClone(DEFAULT_DB);
+  }
+}
 
-      const handleChangePassword = async (e) => {
-        e.preventDefault();
-        setErrorMsg('');
+function App() {
+  const [db, setDb] = useState(loadDatabase);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [loggedInUser, setLoggedInUser] = useState(null);
+  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    kategori: "Kas Gang",
+    jenis: "Pemasukan",
+    tanggal: new Date().toISOString().slice(0,10),
+    nominal: "",
+    keterangan: ""
+  });
 
-        try {
-          const response = await fetch('/api/change-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, newPassword })
-          });
-          const data = await response.json();
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [filter, setFilter] = useState("Semua");
 
-          if (data.success) {
-            alert('Password berhasil diubah! Silakan login ulang dengan password baru.');
-            setIsMustChangePass(false);
-            setPassword('');
-            setNewPassword('');
-          } else {
-            setErrorMsg(data.message);
-          }
-        } catch (err) {
-          setErrorMsg('Gagal mengganti password!');
-        }
-      };
+  // Simpan database setiap terjadi perubahan.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    } catch (error) {
+      setErrorMsg("Penyimpanan gagal. Periksa kapasitas browser.");
+      console.error(error);
+    }
+  }, [db]);
 
-      if (loggedInUser) {
-        return (
-          <div className="min-h-screen bg-slate-100 flex">
-            {/* Sidebar Menu */}
-            <div className="w-64 bg-emerald-900 text-white flex flex-col shadow-xl">
-              <div className="p-5 bg-emerald-950 text-center border-b border-emerald-800">
-                <h1 className="font-bold text-lg tracking-wider">NUANSA16A</h1>
-                <p className="text-xs text-emerald-300 mt-1">Buku Kas & Tabungan Warga</p>
-              </div>
-              <nav className="flex-1 p-4 space-y-1 overflow-y-auto text-sm">
-                {['Dashboard', 'Kas Gang', 'Cor Jalan', 'Jimpitan', 'Ibu-Ibu', 'Data Nasabah', 'Data Leader', 'Tunggakan', 'Laporan', 'Riwayat Transaksi', 'Audit Log', 'Backup Data', 'Restore Data', 'Pengaturan'].map((menu) => (
-                  <button
-                    key={menu}
-                    onClick={() => setActiveMenu(menu)}
-                    className={`w-full text-left px-4 py-2.5 rounded-lg transition font-medium ${activeMenu === menu ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800'}`}
-                  >
-                    {menu}
-                  </button>
-                ))}
-              </nav>
-              <div className="p-4 border-t border-emerald-800">
-                <button 
-                  onClick={() => setLoggedInUser(null)} 
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg transition text-sm shadow"
-                >
-                  Keluar Sistem
-                </button>
-              </div>
-            </div>
+  const formatRupiah = value =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0
+    }).format(Number(value) || 0);
 
-            {/* Main Content Area */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <header className="bg-white shadow-sm h-16 flex items-center justify-between px-8 border-b border-slate-200">
-                <h2 className="text-xl font-bold text-emerald-800">{activeMenu}</h2>
-                <div className="text-sm text-slate-600">
-                  Login sebagai: <strong className="text-emerald-700">{loggedInUser.nama}</strong> ({loggedInUser.role})
-                </div>
-              </header>
+  const addAudit = (aksi, detail) => ({
+    id: crypto.randomUUID(),
+    waktu: new Date().toISOString(),
+    pengguna: loggedInUser?.nama || username || "Sistem",
+    aksi,
+    detail
+  });
 
-              <main className="flex-1 overflow-y-auto p-8">
-                {activeMenu === 'Dashboard' && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Kas Gang</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 4.500.000</h3>
-                      </div>
-                      <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Cor Jalan</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 12.800.000</h3>
-                      </div>
-                      <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Jimpitan</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 1.750.000</h3>
-                      </div>
-                      <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-600">
-                        <p className="text-xs text-slate-500 uppercase font-semibold">Total Saldo Ibu-Ibu</p>
-                        <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp 3.200.000</h3>
-                      </div>
-                    </div>
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-700 mb-4">Ringkasan Aktivitas Keuangan Real-Time</h3>
-                      <p className="text-slate-600 text-sm">Sistem berjalan normal secara lokal di komputer Anda. Silakan pilih menu di sebelah kiri untuk mengelola data nasabah, transaksi, maupun laporan keuangan warga Nuansa16A.</p>
-                    </div>
-                  </div>
-                )}
+  const updateDB = (callback) => {
+    setDb(prev => {
+      const next = callback(prev);
+      return next;
+    });
+  };
 
-                {activeMenu !== 'Dashboard' && (
-                  <div className="bg-white p-6 rounded-xl shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-700 mb-2">Halaman {activeMenu}</h3>
-                    <p className="text-slate-600 text-sm">Modul dan pengaturan untuk <strong>{activeMenu}</strong> siap digunakan.</p>
-                  </div>
-                )}
-              </main>
-            </div>
-          </div>
-        );
+  const handleLogin = async e => {
+    e.preventDefault();
+    setErrorMsg("");
+    setLoading(true);
+
+    try {
+      // Login online melalui API jika backend tersedia.
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username, password})
+      });
+
+      if (!response.ok) throw new Error("API_ERROR");
+
+      const data = await response.json();
+
+      if (!data.success) {
+        setErrorMsg(data.message || "Login gagal.");
+        return;
       }
 
+      if (data.user.mustChangePassword) {
+        setShowPasswordChange(true);
+        setSuccessMsg("Silakan ganti password default.");
+      } else {
+        setLoggedInUser(data.user);
+        updateDB(prev => ({
+          ...prev,
+          audit: [...prev.audit, addAudit("LOGIN", "Pengguna masuk")]
+        }));
+      }
+    } catch (error) {
+      // Tidak membuat akun admin default yang tidak aman.
+      setErrorMsg(
+        "Server login tidak tersedia. Hubungkan backend Node.js terlebih dahulu. Data lokal tetap aman."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async e => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      setErrorMsg("Password minimal 8 karakter.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch("/api/change-password", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username, newPassword})
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Gagal mengganti password.");
+      }
+
+      setShowPasswordChange(false);
+      setPassword("");
+      setNewPassword("");
+      setSuccessMsg("Password berhasil diperbarui. Silakan login ulang.");
+    } catch (error) {
+      setErrorMsg(error.message || "Gagal mengganti password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saldoKategori = kategori => {
+    const awal = Number(db.settings.saldoAwal[kategori] || 0);
+    return db.transactions
+      .filter(t => t.kategori === kategori)
+      .reduce((saldo, t) =>
+        saldo + (t.jenis === "Pemasukan" ? Number(t.nominal) : -Number(t.nominal))
+      , awal);
+  };
+
+  const tambahTransaksi = e => {
+    e.preventDefault();
+    const nominal = Number(form.nominal);
+
+    if (!Number.isFinite(nominal) || nominal <= 0) {
+      setErrorMsg("Nominal transaksi harus lebih besar dari nol.");
+      return;
+    }
+
+    const transaksi = {
+      id: crypto.randomUUID(),
+      ...form,
+      nominal,
+      dibuat: new Date().toISOString(),
+      pengguna: loggedInUser?.nama || "Pengguna"
+    };
+
+    updateDB(prev => ({
+      ...prev,
+      transactions: [...prev.transactions, transaksi],
+      audit: [...prev.audit, addAudit("TRANSAKSI", `${form.jenis} ${form.kategori}: ${formatRupiah(nominal)}`)]
+    }));
+
+    setForm({...form, nominal: "", keterangan: ""});
+    setErrorMsg("");
+    setSuccessMsg("Transaksi berhasil disimpan.");
+  };
+
+  const exportBackup = () => {
+    const data = JSON.stringify(db, null, 2);
+    const blob = new Blob([data], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup-nuansa16a-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const restoreBackup = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = event => {
+      try {
+        const restored = JSON.parse(event.target.result);
+        if (
+          !restored ||
+          !Array.isArray(restored.transactions) ||
+          !Array.isArray(restored.nasabah) ||
+          !restored.settings
+        ) throw new Error("Struktur backup tidak valid.");
+
+        if (!window.confirm("Pulihkan backup? Data aktif akan digantikan. Unduh backup aktif terlebih dahulu.")) return;
+
+        const safeDB = {
+          ...DEFAULT_DB,
+          ...restored,
+          settings: {
+            ...DEFAULT_DB.settings,
+            ...restored.settings,
+            saldoAwal: {
+              ...DEFAULT_DB.settings.saldoAwal,
+              ...(restored.settings.saldoAwal || {})
+            }
+          },
+          transactions: restored.transactions,
+          nasabah: restored.nasabah,
+          leaders: Array.isArray(restored.leaders) ? restored.leaders : [],
+          audit: Array.isArray(restored.audit) ? restored.audit : []
+        };
+
+        setDb(safeDB);
+        setSuccessMsg("Backup berhasil dipulihkan.");
+        setErrorMsg("");
+      } catch (error) {
+        setErrorMsg("File backup tidak valid: " + error.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const tambahNasabah = e => {
+    e.preventDefault();
+    const nama = e.target.nama.value.trim();
+    const alamat = e.target.alamat.value.trim();
+    if (!nama) return;
+
+    updateDB(prev => ({
+      ...prev,
+      nasabah: [...prev.nasabah, {
+        id: crypto.randomUUID(), nama, alamat,
+        dibuat: new Date().toISOString()
+      }],
+      audit: [...prev.audit, addAudit("NASABAH", "Menambah nasabah " + nama)]
+    }));
+    e.target.reset();
+    setSuccessMsg("Nasabah berhasil ditambahkan.");
+  };
+
+  const logout = () => {
+    updateDB(prev => ({
+      ...prev,
+      audit: [...prev.audit, addAudit("LOGOUT", "Pengguna keluar")]
+    }));
+    setLoggedInUser(null);
+    setPassword("");
+    setUsername("");
+  };
+
+  if (!loggedInUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border overflow-hidden">
+          <div className="bg-emerald-700 p-6 text-white text-center">
+            <h2 className="text-xl font-bold">BUKU KAS & TABUNGAN WARGA</h2>
+            <p className="text-emerald-100 text-sm mt-1">NUANSA16A C3/C8</p>
+          </div>
+          <div className="p-6">
+            {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded mb-4 text-sm">{errorMsg}</div>}
+            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 text-sm">{successMsg}</div>}
+
+            {!showPasswordChange ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <label className="block text-sm font-semibold">
+                  Username
+                  <input className="w-full border rounded-lg p-3 mt-1" value={username}
+                    onChange={e=>setUsername(e.target.value)} required />
+                </label>
+                <label className="block text-sm font-semibold">
+                  Password
+                  <input type="password" className="w-full border rounded-lg p-3 mt-1"
+                    value={password} onChange={e=>setPassword(e.target.value)} required />
+                </label>
+                <button disabled={loading} className="w-full bg-emerald-600 text-white p-3 rounded-lg font-bold">
+                  {loading ? "Memproses..." : "Masuk"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <label className="block text-sm font-semibold">
+                  Password baru
+                  <input type="password" className="w-full border rounded-lg p-3 mt-1"
+                    value={newPassword} onChange={e=>setNewPassword(e.target.value)}
+                    minLength="8" required />
+                </label>
+                <button disabled={loading} className="w-full bg-amber-600 text-white p-3 rounded-lg font-bold">
+                  Simpan Password
+                </button>
+              </form>
+            )}
+            <p className="text-xs text-slate-500 mt-4">
+              Penyimpanan lokal aktif. Login tetap memerlukan server autentikasi.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const menuContent = () => {
+    if (activeMenu === "Dashboard") {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-            <div className="bg-emerald-700 p-6 text-white text-center">
-              <h2 className="text-xl font-bold tracking-wide">BUKU KAS & TABUNGAN WARGA</h2>
-              <p className="text-emerald-100 text-sm mt-1">NUANSA16A C3/C8</p>
-            </div>
-
-            <div className="p-6">
-              {errorMsg && (
-                <div className="mb-4 bg-rose-100 border border-rose-300 text-rose-700 px-4 py-3 rounded-lg text-sm">
-                  {errorMsg}
-                </div>
-              )}
-              {successMsg && (
-                <div className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm">
-                  {successMsg}
-                </div>
-              )}
-
-              {!isMustChangePass ? (
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Pengguna (Username)</label>
-                    <input 
-                      type="text" 
-                      value={username} 
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="admin" 
-                      required 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Sandi (Password)</label>
-                    <input 
-                      type="password" 
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="admin123" 
-                      required 
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow-md transition"
-                  >
-                    Masuk
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleChangePassword} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kata Sandi Baru</label>
-                    <input 
-                      type="password" 
-                      value={newPassword} 
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-                      placeholder="Masukkan password baru" 
-                      required 
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-lg shadow-md transition"
-                  >
-                    Simpan Password Baru
-                  </button>
-                </form>
-              )}
-            </div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {["Kas Gang","Cor Jalan","Jimpitan","Ibu-Ibu"].map(k => (
+              <div key={k} className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
+                <p className="text-xs text-slate-500 font-semibold">{k}</p>
+                <h3 className="text-xl font-bold mt-2">{formatRupiah(saldoKategori(k))}</h3>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow">
+            <h3 className="font-bold mb-3">Ringkasan Aktivitas Keuangan</h3>
+            <p>Total transaksi: {db.transactions.length}</p>
+            <p>Total nasabah: {db.nasabah.length}</p>
           </div>
         </div>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+    if (["Kas Gang","Cor Jalan","Jimpitan","Ibu-Ibu"].includes(activeMenu)) {
+      return (
+        <div className="space-y-5">
+          <div className="bg-white rounded-xl p-5 shadow">
+            <h3 className="font-bold text-lg mb-4">Input Transaksi - {activeMenu}</h3>
+            <form onSubmit={tambahTransaksi} className="grid md:grid-cols-2 gap-4">
+              <label className="text-sm font-semibold">Kategori
+                <select className="w-full border rounded p-3 mt-1" value={form.kategori}
+                  onChange={e=>setForm({...form,kategori:e.target.value})}>
+                  {["Kas Gang","Cor Jalan","Jimpitan","Ibu-Ibu"].map(k=><option key={k}>{k}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-semibold">Jenis
+                <select className="w-full border rounded p-3 mt-1" value={form.jenis}
+                  onChange={e=>setForm({...form,jenis:e.target.value})}>
+                  <option>Pemasukan</option><option>Pengeluaran</option>
+                </select>
+              </label>
+              <label className="text-sm font-semibold">Tanggal
+                <input type="date" className="w-full border rounded p-3 mt-1"
+                  value={form.tanggal} onChange={e=>setForm({...form,tanggal:e.target.value})} required />
+              </label>
+              <label className="text-sm font-semibold">Nominal
+                <input type="number" min="1" className="w-full border rounded p-3 mt-1"
+                  value={form.nominal} onChange={e=>setForm({...form,nominal:e.target.value})} required />
+              </label>
+              <label className="text-sm font-semibold md:col-span-2">Keterangan
+                <input className="w-full border rounded p-3 mt-1"
+                  value={form.keterangan} onChange={e=>setForm({...form,keterangan:e.target.value})} />
+              </label>
+              <button className="bg-emerald-600 text-white p-3 rounded-lg font-bold md:col-span-2">Simpan Transaksi</button>
+            </form>
+          </div>
+          <div className="bg-white rounded-xl p-5 shadow">
+            <h3 className="font-bold mb-3">Saldo {activeMenu}: {formatRupiah(saldoKategori(activeMenu))}</h3>
+            <TransaksiTable data={db.transactions.filter(t=>t.kategori===activeMenu)} formatRupiah={formatRupiah}/>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeMenu === "Data Nasabah") {
+      return (
+        <div className="space-y-5">
+          <form onSubmit={tambahNasabah} className="bg-white p-5 rounded-xl shadow space-y-3">
+            <h3 className="font-bold">Tambah Nasabah</h3>
+            <input name="nama" placeholder="Nama nasabah" className="w-full border rounded p-3" required />
+            <input name="alamat" placeholder="Alamat" className="w-full border rounded p-3" />
+            <button className="bg-emerald-600 text-white px-5 py-3 rounded-lg">Simpan Nasabah</button>
+          </form>
+          <div className="bg-white p-5 rounded-xl shadow">
+            <h3 className="font-bold mb-3">Daftar Nasabah ({db.nasabah.length})</h3>
+            {db.nasabah.map((n,i)=><div key={n.id} className="border-b py-3">{i+1}. <b>{n.nama}</b> - {n.alamat}</div>)}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeMenu === "Laporan" || activeMenu === "Riwayat Transaksi") {
+      return (
+        <div className="bg-white p-5 rounded-xl shadow">
+          <h3 className="font-bold mb-4">{activeMenu}</h3>
+          <TransaksiTable data={db.transactions} formatRupiah={formatRupiah}/>
+        </div>
+      );
+    }
+
+    if (activeMenu === "Audit Log") {
+      return <div className="bg-white p-5 rounded-xl shadow">
+        <h3 className="font-bold mb-3">Riwayat Aktivitas Sistem</h3>
+        {db.audit.slice().reverse().map(a=><div key={a.id} className="border-b py-3 text-sm">
+          <b>{a.aksi}</b> - {a.detail}<br/>
+          <span className="text-slate-500">{a.pengguna} | {new Date(a.waktu).toLocaleString("id-ID")}</span>
+        </div>)}
+      </div>;
+    }
+
+    if (activeMenu === "Backup Data") {
+      return <div className="bg-white p-6 rounded-xl shadow space-y-4">
+        <h3 className="font-bold text-lg">Backup Database</h3>
+        <p className="text-sm text-slate-600">Unduh seluruh transaksi, nasabah, pengaturan dan audit log dalam format JSON.</p>
+        <button onClick={exportBackup} className="bg-emerald-600 text-white px-5 py-3 rounded-lg">Unduh Backup</button>
+      </div>;
+    }
+
+    if (activeMenu === "Restore Data") {
+      return <div className="bg-white p-6 rounded-xl shadow space-y-4">
+        <h3 className="font-bold text-lg">Restore Database</h3>
+        <p className="text-sm text-slate-600">Pilih file backup JSON yang sebelumnya diunduh.</p>
+        <input type="file" accept=".json,application/json" onChange={restoreBackup}/>
+      </div>;
+    }
+
+    if (activeMenu === "Pengaturan") {
+      return <div className="bg-white p-6 rounded-xl shadow space-y-4">
+        <h3 className="font-bold text-lg">Pengaturan Aplikasi</h3>
+        <label className="block text-sm">Nama lingkungan
+          <input className="w-full border p-3 rounded mt-1"
+            value={db.settings.nama}
+            onChange={e=>updateDB(prev=>({...prev,settings:{...prev.settings,nama:e.target.value}}))}/>
+        </label>
+        <button onClick={()=>setShowPasswordChange(true)} className="bg-amber-600 text-white p-3 rounded-lg">Ganti Password</button>
+      </div>;
+    }
+
+    if (activeMenu === "Data Leader" || activeMenu === "Tunggakan") {
+      return <div className="bg-white p-6 rounded-xl shadow">
+        <h3 className="font-bold">{activeMenu}</h3>
+        <p className="text-sm text-slate-500 mt-2">Modul dasar tersedia. Pengembangan formulir dan relasi data perlu disesuaikan dengan aturan pengelolaan warga.</p>
+      </div>;
+    }
+
+    return <div className="bg-white p-6 rounded-xl shadow">{activeMenu}</div>;
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row">
+      <aside className="w-full md:w-64 bg-emerald-950 text-white flex flex-col">
+        <div className="p-5 text-center border-b border-emerald-800">
+          <h1 className="font-bold text-lg">NUANSA16A</h1>
+          <p className="text-xs text-emerald-300">{db.settings.nama}</p>
+        </div>
+        <nav className="flex-1 p-3 grid grid-cols-2 md:block gap-1 overflow-y-auto text-sm">
+          {MENUS.map(menu=><button key={menu} onClick={()=>{setActiveMenu(menu);setErrorMsg("");setSuccessMsg("");}}
+            className={`w-full text-left px-3 py-2.5 rounded-lg mb-1 ${activeMenu===menu?"bg-emerald-700":"hover:bg-emerald-800"}`}>
+            {menu}
+          </button>)}
+        </nav>
+        <div className="p-4 border-t border-emerald-800">
+          <p className="text-xs mb-3">Login: {loggedInUser.nama} ({loggedInUser.role})</p>
+          <button onClick={logout} className="w-full bg-rose-600 p-2 rounded-lg">Keluar Sistem</button>
+        </div>
+      </aside>
+
+      <main className="flex-1 min-w-0">
+        <header className="bg-white shadow-sm p-5 border-b">
+          <h2 className="font-bold text-xl text-emerald-800">{activeMenu}</h2>
+        </header>
+        <section className="p-4 md:p-8 space-y-4">
+          {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded">{errorMsg}</div>}
+          {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded">{successMsg}</div>}
+          {menuContent()}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function TransaksiTable({data,formatRupiah}) {
+  if (!data.length) return <p className="text-slate-500 text-sm">Belum ada transaksi.</p>;
+  return <div className="overflow-x-auto">
+    <table className="w-full text-sm text-left">
+      <thead className="bg-slate-100">
+        <tr><th className="p-3">Tanggal</th><th className="p-3">Kategori</th>
+        <th className="p-3">Jenis</th><th className="p-3">Keterangan</th>
+        <th className="p-3 text-right">Nominal</th></tr>
+      </thead>
+      <tbody>
+        {data.slice().sort((a,b)=>b.tanggal.localeCompare(a.tanggal)).map(t=>
+          <tr key={t.id} className="border-b">
+            <td className="p-3">{t.tanggal}</td>
+            <td className="p-3">{t.kategori}</td>
+            <td className="p-3">{t.jenis}</td>
+            <td className="p-3">{t.keterangan}</td>
+            <td className="p-3 text-right font-semibold">{formatRupiah(t.nominal)}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
 </body>
-</html>v
+</html>
