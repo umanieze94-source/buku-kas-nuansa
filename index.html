@@ -54,8 +54,8 @@
             const [timeStr, setTimeStr] = React.useState('');
             const [dateStr, setDateStr] = React.useState('');
 
-            // Logo Aman & Anti-Error
-            const logoUrl = "https://placehold.co/150x150/14532d/ffffff?text=16A";
+            // Logo URL yang dijamin stabil dan cepat dimuat browser
+            const logoUrl = "https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&auto=format&fit=crop&q=80";
 
             React.useEffect(() => {
                 const timer = setInterval(() => {
@@ -148,7 +148,7 @@
                     <div className="min-h-screen flex items-center justify-center bg-darker px-4">
                         <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl p-8 border border-emerald-800">
                             <div className="text-center mb-6">
-                                <img src={logoUrl} alt="Logo NUANSA 16A" className="w-24 h-24 object-cover rounded-2xl mx-auto shadow-lg mb-4 border-2 border-primary" />
+                                <div className="w-20 h-20 bg-primary text-white text-2xl font-black rounded-2xl mx-auto flex items-center justify-center shadow-lg mb-4">16A</div>
                                 <h1 className="text-2xl font-black text-darker">NUANSA 16A C3/C8</h1>
                                 <p className="text-xs font-semibold text-primary mt-1">Sistem Administrasi Warga Digital</p>
                             </div>
@@ -179,7 +179,7 @@
                     {/* Mobile Header */}
                     <div className="md:hidden bg-darker text-white px-4 py-3 flex justify-between items-center shadow-md">
                         <div className="flex items-center space-x-3">
-                            <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-cover" />
+                            <div className="w-8 h-8 bg-primary text-white font-bold rounded-lg flex items-center justify-center text-xs">16A</div>
                             <span className="font-bold text-sm">NUANSA 16A C3/C8</span>
                         </div>
                         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-white text-xl focus:outline-none">
@@ -191,7 +191,7 @@
                     <aside className={`w-full md:w-72 bg-darker text-slate-200 flex flex-col justify-between shadow-2xl z-20 transition-all duration-300 ${mobileMenuOpen ? 'block' : 'hidden md:flex'}`}>
                         <div>
                             <div className="p-6 border-b border-emerald-900 flex items-center space-x-3.5 bg-emerald-950/40">
-                                <img src={logoUrl} alt="Logo NUANSA" className="w-12 h-12 rounded-xl object-cover shadow-md border border-emerald-600" />
+                                <div className="w-12 h-12 bg-primary text-white font-black rounded-xl flex items-center justify-center shadow-md border border-emerald-600 text-lg">16A</div>
                                 <div>
                                     <h2 className="font-black text-white text-base tracking-wide">NUANSA 16A</h2>
                                     <p className="text-xs text-success font-bold">Blok C3 / C8 Karawang</p>
@@ -439,4 +439,22 @@
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-600 mb-1">Keterangan</label>
-                                            <input type="text" value={formWarga.keterangan} onChange={e => setFormWarga({...formWarga, keterangan: e.target.value})} className="w-full px-4
+                                            <input type="text" value={formWarga.keterangan} onChange={e => setFormWarga({...formWarga, keterangan: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Catatan" />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end space-x-3 pt-4">
+                                        <button type="button" onClick={() => setShowModalWarga(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
+                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Data</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
