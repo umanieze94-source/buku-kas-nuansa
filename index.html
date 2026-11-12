@@ -8,203 +8,181 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { margin: 0; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
 <div id="root"></div>
 
 <script type="text/babel">
-const {useState, useEffect} = React;
-
-const MENUS = [
-  "Dashboard", "Kas Gang", "Cor Jalan", "Jimpitan",
-  "Ibu-Ibu", "Data Warga", "Data Leader", "Agenda",
-  "Backup Data"
-];
+const { useState, useEffect } = React;
 
 function App() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [loggedInUser, setLoggedInUser] = useState(null);
-  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [loginType, setLoginType] = useState("admin"); // admin, pengurus, warga
+  
+  // Form States
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [noHp, setNoHp] = useState("");
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [devOtpInfo, setDevOtpInfo] = useState("");
+
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPasswordChange, setShowPasswordChange] = useState(false);
 
-  // State Data dari Server
+  // Data State
   const [members, setMembers] = useState([]);
   const [leaders, setLeaders] = useState([]);
-  const [kasGang, setKasGang] = useState([]);
-  const [agenda, setAgenda] = useState([]);
+  const [activeMenu, setActiveMenu] = useState("Dashboard");
 
-  // Form Transaksi Kas
-  const [formKas, setFormKas] = useState({
-    tanggal: new Date().toISOString().slice(0,10),
-    uraian: "",
-    masuk: "",
-    keluar: "",
-    input_oleh: ""
-  });
-
-  // Fetch Data dari Backend saat Login
   useEffect(() => {
     if (loggedInUser) {
-      fetchAllData();
+      fetchAppData();
     }
   }, [loggedInUser]);
 
-  const fetchAllData = async () => {
+  const fetchAppData = async () => {
     try {
-      const [resMembers, resLeaders, resKas, resAgenda] = await Promise.all([
-        fetch("/api/members").then(res => res.json()),
-        fetch("/api/leaders").then(res => res.json()),
-        fetch("/api/kas-gang").then(res => res.json()),
-        fetch("/api/agenda").then(res => res.json())
+      const [resM, resL] = await Promise.all([
+        fetch("/api/members").then(r => r.json()),
+        fetch("/api/leaders").then(r => r.json())
       ]);
-
-      if (resMembers.success) setMembers(resMembers.data);
-      if (resLeaders.success) setLeaders(resLeaders.data);
-      if (resKas.success) setKasGang(resKas.data);
-      if (resAgenda.success) setAgenda(resAgenda.data);
-    } catch (err) {
-      console.error("Gagal memuat data dari server:", err);
+      if (resM.success) setMembers(resM.data);
+      if (resL.success) setLeaders(resL.data);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const formatRupiah = value =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0
-    }).format(Number(value) || 0);
-
-  const handleLogin = async e => {
+  const handleLoginAdmin = async e => {
     e.preventDefault();
-    setErrorMsg("");
-    setLoading(true);
-
+    setErrorMsg(""); setLoading(true);
     try {
-      const response = await fetch("/api/login", {
+      const res = await fetch("/api/login/admin", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({username, password})
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Login gagal.");
-      }
-
-      if (data.user.mustChangePassword) {
-        setShowPasswordChange(true);
-        setSuccessMsg("Silakan ganti password default Anda (minimal 12 karakter).");
-      } else {
-        setLoggedInUser(data.user);
-      }
-    } catch (error) {
-      setErrorMsg(error.message || "Gagal terhubung ke server.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChangePassword = async e => {
-    e.preventDefault();
-    if (newPassword.length < 12) {
-      setErrorMsg("Password baru minimal 12 karakter.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch("/api/change-password", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({username, newPassword})
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Gagal mengganti password.");
-      }
-
-      setShowPasswordChange(false);
-      setPassword("");
-      setNewPassword("");
-      setSuccessMsg("Password berhasil diperbarui. Silakan login ulang.");
-    } catch (error) {
-      setErrorMsg(error.message || "Gagal mengganti password.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTambahKas = async (e, routeName) => {
-    e.preventDefault();
-    try {
-      const res = await fetch(`/api/${routeName}`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({...formKas, input_oleh: loggedInUser?.nama})
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if (data.success) {
-        setSuccessMsg("Data kas berhasil disimpan.");
-        setFormKas({ tanggal: new Date().toISOString().slice(0,10), uraian: "", masuk: "", keluar: "", input_oleh: "" });
-        fetchAllData();
-      } else {
-        setErrorMsg(data.message);
-      }
+      if (!data.success) throw new Error(data.message);
+      setLoggedInUser(data.user);
     } catch (err) {
-      setErrorMsg("Gagal menyimpan transaksi.");
+      setErrorMsg(err.message || "Login admin gagal.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestOtp = async e => {
+    e.preventDefault();
+    setErrorMsg(""); setLoading(true);
+    const endpoint = loginType === "pengurus" ? "/api/login/pengurus/request" : "/api/login/warga/request";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ no_hp: noHp })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      setOtpStep(true);
+      if (data.dev_otp) setDevOtpInfo(`(Simulasi OTP WhatsApp: ${data.dev_otp})`);
+      setSuccessMsg("Kode OTP telah dikirimkan ke WhatsApp.");
+    } catch (err) {
+      setErrorMsg(err.message || "Gagal meminta OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async e => {
+    e.preventDefault();
+    setErrorMsg(""); setLoading(true);
+    const endpoint = loginType === "pengurus" ? "/api/login/pengurus/verify" : "/api/login/warga/verify";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ no_hp: noHp, otp })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      setLoggedInUser(data.user);
+    } catch (err) {
+      setErrorMsg(err.message || "Verifikasi OTP salah.");
+    } finally {
+      setLoading(false);
     }
   };
 
   if (!loggedInUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border overflow-hidden">
-          <div className="bg-emerald-700 p-6 text-white text-center">
-            <h2 className="text-xl font-bold">BUKU KAS & TABUNGAN WARGA</h2>
-            <p className="text-emerald-100 text-sm mt-1">NUANSA16A</p>
-          </div>
-          <div className="p-6">
-            {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded mb-4 text-sm">{errorMsg}</div>}
-            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 text-sm">{successMsg}</div>}
+      <div className="min-h-screen flex items-center justify-center p-4 relative bg-emerald-950 overflow-hidden">
+        {/* Background Watermark Logo */}
+        <div className="absolute inset-0 opacity-10 bg-center bg-no-repeat bg-contain" style={{backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926')`}}></div>
 
-            {!showPasswordChange ? (
-              <form onSubmit={handleLogin} className="space-y-4">
-                <label className="block text-sm font-semibold">
-                  Username
-                  <input className="w-full border rounded-lg p-3 mt-1" value={username}
-                    onChange={e=>setUsername(e.target.value)} required />
+        <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl border relative z-10 overflow-hidden">
+          <div className="bg-emerald-800 p-6 text-white text-center flex flex-col items-center">
+            {/* Logo Utama */}
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-md mb-3 border-2 border-emerald-400">
+              <span className="text-emerald-800 font-extrabold text-xl">16A</span>
+            </div>
+            <h2 className="text-xl font-bold">NUANSA16A C3/C8</h2>
+            <p className="text-emerald-200 text-xs mt-1">Sistem Keuangan & Warga Terpadu</p>
+          </div>
+
+          <div className="p-6">
+            {/* Tab Pilihan Login */}
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-5 text-xs font-semibold text-center">
+              <button onClick={()=>{setLoginType("admin"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="admin"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Admin</button>
+              <button onClick={()=>{setLoginType("pengurus"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="pengurus"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Pengurus</button>
+              <button onClick={()=>{setLoginType("warga"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="warga"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Warga</button>
+            </div>
+
+            {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded mb-4 text-xs font-medium">{errorMsg}</div>}
+            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 text-xs font-medium">{successMsg}</div>}
+            {devOtpInfo && <div className="bg-amber-100 text-amber-800 p-2 rounded mb-4 text-xs font-bold text-center">{devOtpInfo}</div>}
+
+            {/* FORM LOGIN ADMIN (EMAIL & PASSWORD) */}
+            {loginType === "admin" && (
+              <form onSubmit={handleLoginAdmin} className="space-y-4">
+                <label className="block text-sm font-semibold">Email Admin
+                  <input type="email" className="w-full border rounded-lg p-3 mt-1 text-sm" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@nuansa16a.com" required />
                 </label>
-                <label className="block text-sm font-semibold">
-                  Password
-                  <input type="password" className="w-full border rounded-lg p-3 mt-1"
-                    value={password} onChange={e=>setPassword(e.target.value)} required />
+                <label className="block text-sm font-semibold">Password Rahasia
+                  <input type="password" className="w-full border rounded-lg p-3 mt-1 text-sm" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••••••" required />
                 </label>
-                <button disabled={loading} className="w-full bg-emerald-600 text-white p-3 rounded-lg font-bold">
-                  {loading ? "Memproses..." : "Masuk"}
+                <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
+                  {loading ? "Memproses..." : "Masuk sebagai Admin"}
                 </button>
               </form>
-            ) : (
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <label className="block text-sm font-semibold">
-                  Password Baru (Min. 12 Karakter)
-                  <input type="password" className="w-full border rounded-lg p-3 mt-1"
-                    value={newPassword} onChange={e=>setNewPassword(e.target.value)}
-                    minLength="12" required />
-                </label>
-                <button disabled={loading} className="w-full bg-amber-600 text-white p-3 rounded-lg font-bold">
-                  Simpan Password Baru
-                </button>
-              </form>
+            )}
+
+            {/* FORM LOGIN PENGURUS & WARGA (WHATSAPP & OTP) */}
+            {(loginType === "pengurus" || loginType === "warga") && (
+              <div>
+                {!otpStep ? (
+                  <form onSubmit={handleRequestOtp} className="space-y-4">
+                    <label className="block text-sm font-semibold">Nomor WhatsApp Terdaftar
+                      <input type="text" className="w-full border rounded-lg p-3 mt-1 text-sm" value={noHp} onChange={e=>setNoHp(e.target.value)} placeholder="08123456789" required />
+                    </label>
+                    <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
+                      {loading ? "Mengirim..." : "Kirim Kode OTP WhatsApp"}
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <label className="block text-sm font-semibold">Masukkan 6 Digit Kode OTP
+                      <input type="text" maxLength="6" className="w-full border rounded-lg p-3 mt-1 text-center tracking-widest text-lg font-bold" value={otp} onChange={e=>setOtp(e.target.value)} placeholder="123456" required />
+                    </label>
+                    <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
+                      {loading ? "Verifikasi..." : "Verifikasi & Masuk"}
+                    </button>
+                    <button type="button" onClick={()=>setOtpStep(false)} className="w-full text-xs text-slate-500 hover:underline mt-2">Ganti Nomor WhatsApp</button>
+                  </form>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -215,128 +193,76 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="w-full md:w-64 bg-emerald-950 text-white flex flex-col">
-        <div className="p-5 text-center border-b border-emerald-800">
-          <h1 className="font-bold text-lg">NUANSA16A</h1>
-          <p className="text-xs text-emerald-300">Sistem Keuangan Warga</p>
+        <div className="p-5 text-center border-b border-emerald-800 flex items-center space-x-3">
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center font-bold text-emerald-900">16A</div>
+          <div className="text-left">
+            <h1 className="font-bold text-sm">NUANSA16A</h1>
+            <p className="text-[10px] text-emerald-300">Role: {loggedInUser.role}</p>
+          </div>
         </div>
-        <nav className="flex-1 p-3 grid grid-cols-2 md:block gap-1 overflow-y-auto text-sm">
-          {MENUS.map(menu => (
-            <button key={menu} onClick={()=>{setActiveMenu(menu);setErrorMsg("");setSuccessMsg("");}}
-              className={`w-full text-left px-3 py-2.5 rounded-lg mb-1 ${activeMenu===menu?"bg-emerald-700":"hover:bg-emerald-800"}`}>
-              {menu}
-            </button>
-          ))}
+        <nav className="flex-1 p-3 space-y-1 text-sm">
+          <button onClick={()=>setActiveMenu("Dashboard")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Dashboard"?"bg-emerald-700":""}`}>Dashboard</button>
+          <button onClick={()=>setActiveMenu("Warga")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Warga"?"bg-emerald-700":""}`}>Data Warga</button>
+          <button onClick={()=>setActiveMenu("Pengurus")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Pengurus"?"bg-emerald-700":""}`}>Data Pengurus</button>
+          {loggedInUser.role === "SUPER_ADMIN" && (
+            <button onClick={()=>setActiveMenu("Backup")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Backup"?"bg-emerald-700":""}`}>Backup Database</button>
+          )}
         </nav>
         <div className="p-4 border-t border-emerald-800">
-          <p className="text-xs mb-3">Login: <b>{loggedInUser.nama}</b></p>
-          <button onClick={()=>setLoggedInUser(null)} className="w-full bg-rose-600 p-2 rounded-lg text-sm font-semibold">Keluar</button>
+          <p className="text-xs mb-2">Login sebagai: <b>{loggedInUser.nama}</b></p>
+          <button onClick={()=>setLoggedInUser(null)} className="w-full bg-rose-600 p-2 rounded-lg text-xs font-semibold">Keluar</button>
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0">
-        <header className="bg-white shadow-sm p-5 border-b">
+      <main className="flex-1 min-w-0 p-6">
+        <header className="bg-white shadow-sm p-4 rounded-xl mb-6 flex justify-between items-center">
           <h2 className="font-bold text-xl text-emerald-800">{activeMenu}</h2>
+          <span className="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-semibold">Akses: {loggedInUser.role}</span>
         </header>
-        <section className="p-4 md:p-8 space-y-4">
-          {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded">{errorMsg}</div>}
-          {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded">{successMsg}</div>}
 
-          {activeMenu === "Dashboard" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
-                <p className="text-xs text-slate-500 font-semibold">Total Warga Terdaftar</p>
-                <h3 className="text-2xl font-bold mt-2">{members.length} Orang</h3>
-              </div>
-              <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
-                <p className="text-xs text-slate-500 font-semibold">Total Pengurus (Leader)</p>
-                <h3 className="text-2xl font-bold mt-2">{leaders.length} Orang</h3>
-              </div>
-              <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
-                <p className="text-xs text-slate-500 font-semibold">Total Transaksi Kas Gang</p>
-                <h3 className="text-2xl font-bold mt-2">{kasGang.length} Catatan</h3>
-              </div>
+        {activeMenu === "Dashboard" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
+              <h3 className="font-bold text-slate-500 text-xs">Total Warga Terdaftar</h3>
+              <p className="text-2xl font-bold mt-2">{members.length} Orang</p>
             </div>
-          )}
-
-          {activeMenu === "Kas Gang" && (
-            <div className="space-y-5">
-              <form onSubmit={e=>handleTambahKas(e, 'kas-gang')} className="bg-white p-5 rounded-xl shadow grid md:grid-cols-2 gap-4">
-                <h3 className="font-bold text-lg md:col-span-2">Catat Transaksi Kas Gang</h3>
-                <label className="text-sm font-semibold">Tanggal
-                  <input type="date" className="w-full border rounded p-3 mt-1"
-                    value={formKas.tanggal} onChange={e=>setFormKas({...formKas, tanggal:e.target.value})} required />
-                </label>
-                <label className="text-sm font-semibold">Uraian / Keterangan
-                  <input className="w-full border rounded p-3 mt-1"
-                    value={formKas.uraian} onChange={e=>setFormKas({...formKas, uraian:e.target.value})} placeholder="Contoh: Pembelian semen" required />
-                </label>
-                <label className="text-sm font-semibold">Pemasukan (Masuk)
-                  <input type="number" min="0" className="w-full border rounded p-3 mt-1"
-                    value={formKas.masuk} onChange={e=>setFormKas({...formKas, masuk:e.target.value})} />
-                </label>
-                <label className="text-sm font-semibold">Pengeluaran (Keluar)
-                  <input type="number" min="0" className="w-full border rounded p-3 mt-1"
-                    value={formKas.keluar} onChange={e=>setFormKas({...formKas, kelar:e.target.value})} />
-                </label>
-                <button className="bg-emerald-600 text-white p-3 rounded-lg font-bold md:col-span-2">Simpan Transaksi Kas</button>
-              </form>
-
-              <div className="bg-white rounded-xl p-5 shadow overflow-x-auto">
-                <h3 className="font-bold mb-3">Riwayat Kas Gang</h3>
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-100">
-                    <tr><th className="p-3">Tanggal</th><th className="p-3">Uraian</th><th className="p-3 text-right">Masuk</th><th className="p-3 text-right">Keluar</th><th className="p-3">Input Oleh</th></tr>
-                  </thead>
-                  <tbody>
-                    {kasGang.map(k => (
-                      <tr key={k.id} className="border-b">
-                        <td className="p-3">{k.tanggal}</td>
-                        <td className="p-3">{k.uraian}</td>
-                        <td className="p-3 text-right text-emerald-600 font-semibold">{formatRupiah(k.masuk)}</td>
-                        <td className="p-3 text-right text-rose-600 font-semibold">{formatRupiah(k.keluar)}</td>
-                        <td className="p-3 text-slate-500">{k.input_oleh || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
+              <h3 className="font-bold text-slate-500 text-xs">Total Pengurus Aktif</h3>
+              <p className="text-2xl font-bold mt-2">{leaders.length} Orang</p>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeMenu === "Data Warga" && (
-            <div className="bg-white p-6 rounded-xl shadow space-y-4">
-              <h3 className="font-bold text-lg">Daftar Warga Terdaftar ({members.length})</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-100">
-                    <tr><th className="p-3">Nama</th><th className="p-3">NIK</th><th className="p-3">Alamat</th><th className="p-3">No HP</th><th className="p-3">Kategori</th></tr>
-                  </thead>
-                  <tbody>
-                    {members.map(m => (
-                      <tr key={m.id} className="border-b">
-                        <td className="p-3 font-semibold">{m.nama}</td>
-                        <td className="p-3">{m.nik || '-'}</td>
-                        <td className="p-3">{m.alamat || '-'}</td>
-                        <td className="p-3">{m.no_hp || '-'}</td>
-                        <td className="p-3">{m.kategori || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+        {activeMenu === "Warga" && (
+          <div className="bg-white p-6 rounded-xl shadow space-y-4">
+            <h3 className="font-bold text-lg">Daftar Warga Warga Nuansa 16A</h3>
+            {loggedInUser.role === "SUPER_ADMIN" && (
+              <p className="text-xs text-emerald-600 font-semibold">* Admin dapat mendaftarkan nomor WhatsApp warga di sini agar bisa login.</p>
+            )}
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-100">
+                <tr><th className="p-3">Nama</th><th className="p-3">Alamat</th><th className="p-3">No WhatsApp</th><th className="p-3">Kategori</th></tr>
+              </thead>
+              <tbody>
+                {members.map(m=>(
+                  <tr key={m.id} className="border-b">
+                    <td className="p-3 font-semibold">{m.nama}</td>
+                    <td className="p-3">{m.alamat}</td>
+                    <td className="p-3">{m.no_hp}</td>
+                    <td className="p-3">{m.kategori}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {activeMenu === "Backup Data" && (
-            <div className="bg-white p-6 rounded-xl shadow space-y-4">
-              <h3 className="font-bold text-lg">Backup Database SQLite</h3>
-              <p className="text-sm text-slate-600">Unduh salinan file database server secara langsung untuk arsip keamanan.</p>
-              <a href="/api/admin/backup" target="_blank" className="inline-block bg-emerald-600 text-white px-5 py-3 rounded-lg font-bold">
-                Unduh File Backup Database (.sqlite)
-              </a>
-            </div>
-          )}
-        </section>
+        {activeMenu === "Backup" && loggedInUser.role === "SUPER_ADMIN" && (
+          <div className="bg-white p-6 rounded-xl shadow space-y-4">
+            <h3 className="font-bold text-lg">Backup Database SQLite</h3>
+            <a href="/api/admin/backup" target="_blank" className="inline-block bg-emerald-600 text-white px-5 py-3 rounded-lg font-bold text-sm">Unduh Backup Database (.sqlite)</a>
+          </div>
+        )}
       </main>
     </div>
   );
