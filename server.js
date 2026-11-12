@@ -20,8 +20,8 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
@@ -106,32 +106,60 @@ async function initDatabase() {
             pin_otp TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS kas_gang (
+        CREATE TABLE IF NOT EXISTS keuangan (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kategori_transaksi TEXT NOT NULL, -- Kas, Tabungan Cor, Jimpitan, Dana Sosial
             tanggal TEXT NOT NULL,
             uraian TEXT,
             masuk REAL DEFAULT 0,
             keluar REAL DEFAULT 0,
             input_oleh TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama_aset TEXT NOT NULL,
+            kategori TEXT NOT NULL,
+            tanggal_pembelian TEXT,
+            nilai_pembelian REAL DEFAULT 0,
+            kondisi TEXT,
+            lokasi TEXT,
+            keterangan TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            judul TEXT NOT NULL,
+            isi TEXT NOT NULL,
+            tanggal TEXT NOT NULL,
+            status TEXT DEFAULT 'Aktif'
+        );
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            aksi TEXT NOT NULL,
+            pelaku TEXT NOT NULL,
+            detail TEXT,
+            waktu DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
 
-    // Inisialisasi Admin Utama via Email dari Environment Variable
+    // Inisialisasi Admin Utama
     const adminEmail = process.env.ADMIN_EMAIL || "admin@nuansa16a.com";
     const admin = await get('SELECT id FROM users WHERE email = ?', [adminEmail]);
 
     if (!admin) {
-        const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || "AdminNuansa16A#2026";
+        const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || "Nuansa16A#2026";
         const hash = await bcrypt.hash(initialPassword, 12);
         await run(
             `INSERT INTO users (email, password, role, nama, must_change_password) VALUES (?, ?, ?, ?, 0)`,
             [adminEmail, hash, 'SUPER_ADMIN', 'Super Admin Utama']
         );
-        console.log('Akun Super Admin berhasil dibuat dengan email:', adminEmail);
+        console.log('Akun Super Admin berhasil diinisialisasi.');
     }
 }
 
-// 1. LOGIN ADMIN (Menggunakan Email & Password)
+// LOGIN ADMIN
 app.post('/api/login/admin', asyncRoute(async (req, res) => {
     const { email, password } = req.body;
     const user = await get('SELECT * FROM users WHERE email = ?', [email]);
@@ -146,58 +174,33 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
     });
 }));
 
-// 2. REQUEST & VERIFY OTP PENGURUS & WARGA (Menggunakan No WhatsApp)
-function makeOtp() {
-    return crypto.randomInt(100000, 1000000).toString();
-}
-
-async function requestOtp(table, noHp, res) {
-    const person = await get(`SELECT id FROM ${table} WHERE no_hp = ?`, [noHp]);
-    if (!person) {
-        return res.status(404).json({ success: false, message: 'Nomor WhatsApp tidak terdaftar di sistem oleh Admin.' });
-    }
-
-    const otp = makeOtp();
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-
-    await run(`UPDATE ${table} SET pin_otp = ? WHERE id = ?`, [hash, person.id]);
+// API STATISTIK DASHBOARD EXECUTIVE & KEUANGAN
+app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
+    const membersCount = await get('SELECT COUNT(*) as cnt FROM members');
+    const leadersCount = await get('SELECT COUNT(*) as cnt FROM leaders');
+    const assetsSum = await get('SELECT SUM(nilai_pembelian) as total, COUNT(*) as cnt FROM assets');
+    
+    const kas = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Kas"');
+    const cor = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Tabungan Cor"');
+    const jimpitan = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Jimpitan"');
+    const sosial = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Dana Sosial"');
 
     res.json({
         success: true,
-        message: 'Kode OTP WhatsApp berhasil digenerate.',
-        dev_otp: otp // Ditampilkan untuk pengujian langsung
-    });
-}
-
-async function verifyOtp(table, noHp, otp, roleName, res) {
-    const hash = crypto.createHash('sha256').update(otp).digest('hex');
-    const person = await get(`SELECT * FROM ${table} WHERE no_hp = ? AND pin_otp = ?`, [noHp, hash]);
-
-    if (!person) {
-        return res.status(400).json({ success: false, message: 'Kode OTP salah atau sudah kedaluwarsa.' });
-    }
-
-    await run(`UPDATE ${table} SET pin_otp = NULL WHERE id = ?`, [person.id]);
-
-    res.json({
-        success: true,
-        user: {
-            id: person.id,
-            nama: person.nama,
-            no_hp: person.no_hp,
-            role: roleName,
-            jabatan: person.jabatan || 'Warga'
+        stats: {
+            members: membersCount.cnt,
+            leaders: leadersCount.cnt,
+            totalAset: assetsSum.cnt || 0,
+            nilaiAset: assetsSum.total || 0,
+            saldoKas: kas.saldo || 0,
+            saldoCor: cor.saldo || 0,
+            saldoJimpitan: jimpitan.saldo || 0,
+            saldoSosial: sosial.saldo || 0
         }
     });
-}
+}));
 
-app.post('/api/login/pengurus/request', asyncRoute((req, res) => requestOtp('leaders', req.body.no_hp, res)));
-app.post('/api/login/pengurus/verify', asyncRoute((req, res) => verifyOtp('leaders', req.body.no_hp, req.body.otp, 'LEADER', res)));
-
-app.post('/api/login/warga/request', asyncRoute((req, res) => requestOtp('members', req.body.no_hp, res)));
-app.post('/api/login/warga/verify', asyncRoute((req, res) => verifyOtp('members', req.body.no_hp, req.body.otp, 'WARGA', res)));
-
-// API DATA WARGA & PENGURUS (Hanya Admin yang bisa CRUD)
+// API WARGA & PENGURUS
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -206,7 +209,7 @@ app.get('/api/members', asyncRoute(async (req, res) => {
 app.post('/api/members', asyncRoute(async (req, res) => {
     const { nik, nama, alamat, no_hp, kategori } = req.body;
     await run('INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)', [nik, nama, alamat, no_hp, kategori]);
-    res.json({ success: true, message: 'Warga berhasil didaftarkan.' });
+    res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
 }));
 
 app.get('/api/leaders', asyncRoute(async (req, res) => {
@@ -217,7 +220,20 @@ app.get('/api/leaders', asyncRoute(async (req, res) => {
 app.post('/api/leaders', asyncRoute(async (req, res) => {
     const { nama, jabatan, no_hp, pic_modul } = req.body;
     await run('INSERT INTO leaders (nama, jabatan, no_hp, pic_modul) VALUES (?, ?, ?, ?)', [nama, jabatan, no_hp, pic_modul]);
-    res.json({ success: true, message: 'Pengurus berhasil didaftarkan.' });
+    res.json({ success: true, message: 'Pengurus berhasil ditambahkan.' });
+}));
+
+// API ASET
+app.get('/api/assets', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM assets ORDER BY id DESC');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/assets', asyncRoute(async (req, res) => {
+    const { nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan } = req.body;
+    await run('INSERT INTO assets (nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan]);
+    res.json({ success: true, message: 'Aset berhasil dicatat.' });
 }));
 
 // BACKUP DATABASE
