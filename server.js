@@ -7,7 +7,6 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -20,8 +19,8 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
@@ -76,6 +75,14 @@ function asyncRoute(handler) {
     };
 }
 
+async function logAudit(aksi, pelaku, detail) {
+    try {
+        await run('INSERT INTO audit_logs (aksi, pelaku, detail) VALUES (?, ?, ?)', [aksi, pelaku, detail]);
+    } catch (e) {
+        console.error('Gagal mencatat audit log:', e);
+    }
+}
+
 async function initDatabase() {
     await exec(`
         CREATE TABLE IF NOT EXISTS users (
@@ -83,8 +90,7 @@ async function initDatabase() {
             email TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             role TEXT NOT NULL,
-            nama TEXT NOT NULL,
-            must_change_password INTEGER DEFAULT 0
+            nama TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS leaders (
@@ -92,8 +98,7 @@ async function initDatabase() {
             nama TEXT NOT NULL,
             jabatan TEXT NOT NULL,
             no_hp TEXT UNIQUE NOT NULL,
-            pic_modul TEXT DEFAULT 'Kas Gang',
-            pin_otp TEXT
+            pic_modul TEXT DEFAULT 'Kas Gang'
         );
 
         CREATE TABLE IF NOT EXISTS members (
@@ -102,13 +107,12 @@ async function initDatabase() {
             nama TEXT NOT NULL,
             alamat TEXT,
             no_hp TEXT UNIQUE,
-            kategori TEXT,
-            pin_otp TEXT
+            kategori TEXT
         );
 
         CREATE TABLE IF NOT EXISTS keuangan (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kategori_transaksi TEXT NOT NULL, -- Kas, Tabungan Cor, Jimpitan, Dana Sosial
+            kategori_transaksi TEXT NOT NULL,
             tanggal TEXT NOT NULL,
             uraian TEXT,
             masuk REAL DEFAULT 0,
@@ -144,7 +148,6 @@ async function initDatabase() {
         );
     `);
 
-    // Inisialisasi Admin Utama
     const adminEmail = process.env.ADMIN_EMAIL || "admin@nuansa16a.com";
     const admin = await get('SELECT id FROM users WHERE email = ?', [adminEmail]);
 
@@ -152,7 +155,7 @@ async function initDatabase() {
         const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || "Nuansa16A#2026";
         const hash = await bcrypt.hash(initialPassword, 12);
         await run(
-            `INSERT INTO users (email, password, role, nama, must_change_password) VALUES (?, ?, ?, ?, 0)`,
+            `INSERT INTO users (email, password, role, nama) VALUES (?, ?, ?, ?)`,
             [adminEmail, hash, 'SUPER_ADMIN', 'Super Admin Utama']
         );
         console.log('Akun Super Admin berhasil diinisialisasi.');
@@ -168,13 +171,14 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
         return res.status(401).json({ success: false, message: 'Email atau password admin salah.' });
     }
 
+    await logAudit('LOGIN', user.nama, 'Super Admin masuk ke sistem');
     res.json({
         success: true,
         user: { id: user.id, email: user.email, nama: user.nama, role: user.role }
     });
 }));
 
-// API STATISTIK DASHBOARD EXECUTIVE & KEUANGAN
+// DASHBOARD STATS & EXECUTIVE SUMMARY
 app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const membersCount = await get('SELECT COUNT(*) as cnt FROM members');
     const leadersCount = await get('SELECT COUNT(*) as cnt FROM leaders');
@@ -185,58 +189,103 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const jimpitan = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Jimpitan"');
     const sosial = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Dana Sosial"');
 
+    const saldoKas = kas.saldo || 0;
+    const saldoCor = cor.saldo || 0;
+    const saldoJimpitan = jimpitan.saldo || 0;
+    const saldoSosial = sosial.saldo || 0;
+    const nilaiAset = assetsSum.total || 0;
+    const totalKekayaan = saldoKas + saldoCor + saldoJimpitan + saldoSosial + nilaiAset;
+
     res.json({
         success: true,
         stats: {
             members: membersCount.cnt,
             leaders: leadersCount.cnt,
             totalAset: assetsSum.cnt || 0,
-            nilaiAset: assetsSum.total || 0,
-            saldoKas: kas.saldo || 0,
-            saldoCor: cor.saldo || 0,
-            saldoJimpitan: jimpitan.saldo || 0,
-            saldoSosial: sosial.saldo || 0
+            nilaiAset,
+            saldoKas,
+            saldoCor,
+            saldoJimpitan,
+            saldoSosial,
+            totalKekayaan
         }
     });
 }));
 
-// API WARGA & PENGURUS
+// WARGA
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
 }));
 
 app.post('/api/members', asyncRoute(async (req, res) => {
-    const { nik, nama, alamat, no_hp, kategori } = req.body;
+    const { nik, nama, alamat, no_hp, kategori, actor } = req.body;
     await run('INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)', [nik, nama, alamat, no_hp, kategori]);
+    await logAudit('TAMBAH WARGA', actor || 'Admin', `Menambahkan warga: ${nama}`);
     res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
 }));
 
+// PENGURUS
 app.get('/api/leaders', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM leaders ORDER BY nama');
     res.json({ success: true, data: rows });
 }));
 
 app.post('/api/leaders', asyncRoute(async (req, res) => {
-    const { nama, jabatan, no_hp, pic_modul } = req.body;
+    const { nama, jabatan, no_hp, pic_modul, actor } = req.body;
     await run('INSERT INTO leaders (nama, jabatan, no_hp, pic_modul) VALUES (?, ?, ?, ?)', [nama, jabatan, no_hp, pic_modul]);
+    await logAudit('TAMBAH PENGURUS', actor || 'Admin', `Menambahkan pengurus: ${nama}`);
     res.json({ success: true, message: 'Pengurus berhasil ditambahkan.' });
 }));
 
-// API ASET
+// KEUANGAN / TRANSAKSI
+app.get('/api/keuangan', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM keuangan ORDER BY id DESC');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/keuangan', asyncRoute(async (req, res) => {
+    const { kategori_transaksi, tanggal, uraian, masuk, keluar, actor } = req.body;
+    await run('INSERT INTO keuangan (kategori_transaksi, tanggal, uraian, masuk, keluar, input_oleh) VALUES (?, ?, ?, ?, ?, ?)',
+        [kategori_transaksi, tanggal, uraian, masuk || 0, keluar || 0, actor || 'Admin']);
+    await logAudit('TAMBAH TRANSAKSI', actor || 'Admin', `Transaksi [${kategori_transaksi}] Rp ${(masuk || keluar).toLocaleString()}`);
+    res.json({ success: true, message: 'Transaksi berhasil disimpan.' });
+}));
+
+// ASET LINGKUNGAN
 app.get('/api/assets', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM assets ORDER BY id DESC');
     res.json({ success: true, data: rows });
 }));
 
 app.post('/api/assets', asyncRoute(async (req, res) => {
-    const { nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan } = req.body;
+    const { nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan, actor } = req.body;
     await run('INSERT INTO assets (nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan]);
+        [nama_aset, kategori, tanggal_pembelian, nilai_pembelian || 0, kondisi, lokasi, keterangan]);
+    await logAudit('TAMBAH ASET', actor || 'Admin', `Mencatat aset: ${nama_aset}`);
     res.json({ success: true, message: 'Aset berhasil dicatat.' });
 }));
 
-// BACKUP DATABASE
+// PENGUMUMAN
+app.get('/api/announcements', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM announcements ORDER BY id DESC');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/announcements', asyncRoute(async (req, res) => {
+    const { judul, isi, tanggal, status, actor } = req.body;
+    await run('INSERT INTO announcements (judul, isi, tanggal, status) VALUES (?, ?, ?, ?)', [judul, isi, tanggal, status || 'Aktif']);
+    await logAudit('BUAT PENGUMUMAN', actor || 'Admin', `Membuat pengumuman: ${judul}`);
+    res.json({ success: true, message: 'Pengumuman berhasil dipublikasikan.' });
+}));
+
+// AUDIT LOG
+app.get('/api/audit-logs', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100');
+    res.json({ success: true, data: rows });
+}));
+
+// BACKUP & RESTORE
 app.get('/api/admin/backup', asyncRoute(async (req, res) => {
     const filename = `backup-nuansa16a-${new Date().toISOString().slice(0,10)}.sqlite`;
     const destination = path.join(BACKUP_DIR, filename);
