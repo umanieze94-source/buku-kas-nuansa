@@ -1,274 +1,374 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BUKU KAS & TABUNGAN WARGA NUANSA16A</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Administrasi Warga - NUANSA16A</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0F766E',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                        bgapp: '#F8FAFC'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans">
-<div id="root"></div>
+<body class="bg-bgapp text-slate-800 font-sans antialiased">
+    <div id="root"></div>
 
-<script type="text/babel">
-const { useState, useEffect } = React;
+    <script type="text/babel">
+        function App() {
+            const [user, setUser] = React.useState(null);
+            const [activeTab, setActiveTab] = React.useState('dashboard');
+            const [stats, setStats] = React.useState({});
+            const [members, setMembers] = React.useState([]);
+            const [leaders, setLeaders] = React.useState([]);
+            const [assets, setAssets] = React.useState([]);
+            const [announcements, setAnnouncements] = React.useState([]);
+            const [auditLogs, setAuditLogs] = React.useState([]);
+            const [keuangan, setKeuangan] = React.useState([]);
+            const [searchQuery, setSearchQuery] = React.useState('');
+            
+            // Login Form State
+            const [loginEmail, setLoginEmail] = React.useState('');
+            const [loginPassword, setLoginPassword] = React.useState('');
+            const [loginError, setLoginError] = React.useState('');
 
-function App() {
-  const [loggedInUser, setLoggedInUser] = useState(null);
-  const [loginType, setLoginType] = useState("admin"); // admin, pengurus, warga
-  
-  // Form States
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [noHp, setNoHp] = useState("");
-  const [otpStep, setOtpStep] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [devOtpInfo, setDevOtpInfo] = useState("");
+            // Realtime Clock
+            const [timeStr, setTimeStr] = React.useState('');
+            const [dateStr, setDateStr] = React.useState('');
 
-  const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [loading, setLoading] = useState(false);
+            React.useEffect(() => {
+                const timer = setInterval(() => {
+                    const now = new Date();
+                    setTimeStr(now.toLocaleTimeString('id-ID'));
+                    setDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+                }, 1000);
+                return () => clearInterval(timer);
+            }, []);
 
-  // Data State
-  const [members, setMembers] = useState([]);
-  const [leaders, setLeaders] = useState([]);
-  const [activeMenu, setActiveMenu] = useState("Dashboard");
+            const fetchData = async () => {
+                try {
+                    const resStats = await fetch('/api/dashboard/stats');
+                    const dStats = await resStats.json();
+                    if (dStats.success) setStats(dStats.stats);
 
-  useEffect(() => {
-    if (loggedInUser) {
-      fetchAppData();
-    }
-  }, [loggedInUser]);
+                    const resMem = await fetch('/api/members');
+                    const dMem = await resMem.json();
+                    if (dMem.success) setMembers(dMem.data);
 
-  const fetchAppData = async () => {
-    try {
-      const [resM, resL] = await Promise.all([
-        fetch("/api/members").then(r => r.json()),
-        fetch("/api/leaders").then(r => r.json())
-      ]);
-      if (resM.success) setMembers(resM.data);
-      if (resL.success) setLeaders(resL.data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+                    const resLead = await fetch('/api/leaders');
+                    const dLead = await resLead.json();
+                    if (dLead.success) setLeaders(dLead.data);
 
-  const handleLoginAdmin = async e => {
-    e.preventDefault();
-    setErrorMsg(""); setLoading(true);
-    try {
-      const res = await fetch("/api/login/admin", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      setLoggedInUser(data.user);
-    } catch (err) {
-      setErrorMsg(err.message || "Login admin gagal.");
-    } finally {
-      setLoading(false);
-    }
-  };
+                    const resAsset = await fetch('/api/assets');
+                    const dAsset = await resAsset.json();
+                    if (dAsset.success) setAssets(dAsset.data);
 
-  const handleRequestOtp = async e => {
-    e.preventDefault();
-    setErrorMsg(""); setLoading(true);
-    const endpoint = loginType === "pengurus" ? "/api/login/pengurus/request" : "/api/login/warga/request";
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ no_hp: noHp })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      setOtpStep(true);
-      if (data.dev_otp) setDevOtpInfo(`(Simulasi OTP WhatsApp: ${data.dev_otp})`);
-      setSuccessMsg("Kode OTP telah dikirimkan ke WhatsApp.");
-    } catch (err) {
-      setErrorMsg(err.message || "Gagal meminta OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
+                    const resAnno = await fetch('/api/announcements');
+                    const dAnno = await resAnno.json();
+                    if (dAnno.success) setAnnouncements(dAnno.data);
 
-  const handleVerifyOtp = async e => {
-    e.preventDefault();
-    setErrorMsg(""); setLoading(true);
-    const endpoint = loginType === "pengurus" ? "/api/login/pengurus/verify" : "/api/login/warga/verify";
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ no_hp: noHp, otp })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      setLoggedInUser(data.user);
-    } catch (err) {
-      setErrorMsg(err.message || "Verifikasi OTP salah.");
-    } finally {
-      setLoading(false);
-    }
-  };
+                    const resAudit = await fetch('/api/audit-logs');
+                    const dAudit = await resAudit.json();
+                    if (dAudit.success) setAuditLogs(dAudit.data);
 
-  if (!loggedInUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 relative bg-emerald-950 overflow-hidden">
-        {/* Background Watermark Logo */}
-        <div className="absolute inset-0 opacity-10 bg-center bg-no-repeat bg-contain" style={{backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926')`}}></div>
+                    const resKeu = await fetch('/api/keuangan');
+                    const dKeu = await resKeu.json();
+                    if (dKeu.success) setKeuangan(dKeu.data);
+                } catch (e) {
+                    console.error('Gagal mengambil data:', e);
+                }
+            };
 
-        <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl border relative z-10 overflow-hidden">
-          <div className="bg-emerald-800 p-6 text-white text-center flex flex-col items-center">
-            {/* Logo Utama */}
-            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-md mb-3 border-2 border-emerald-400">
-              <span className="text-emerald-800 font-extrabold text-xl">16A</span>
-            </div>
-            <h2 className="text-xl font-bold">NUANSA16A C3/C8</h2>
-            <p className="text-emerald-200 text-xs mt-1">Sistem Keuangan & Warga Terpadu</p>
-          </div>
+            React.useEffect(() => {
+                if (user) {
+                    fetchData();
+                    const interval = setInterval(fetchData, 5000);
+                    return () => clearInterval(interval);
+                }
+            }, [user]);
 
-          <div className="p-6">
-            {/* Tab Pilihan Login */}
-            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-5 text-xs font-semibold text-center">
-              <button onClick={()=>{setLoginType("admin"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="admin"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Admin</button>
-              <button onClick={()=>{setLoginType("pengurus"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="pengurus"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Pengurus</button>
-              <button onClick={()=>{setLoginType("warga"); setOtpStep(false); setErrorMsg("");}} className={`py-2 rounded-lg transition ${loginType==="warga"?"bg-emerald-700 text-white shadow":"text-slate-600"}`}>Warga</button>
-            </div>
+            const handleAdminLogin = async (e) => {
+                e.preventDefault();
+                setLoginError('');
+                try {
+                    const res = await fetch('/api/login/admin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        setUser(data.user);
+                    } else {
+                        setLoginError(data.message || 'Login gagal.');
+                    }
+                } catch (err) {
+                    setLoginError('Terjadi kesalahan koneksi.');
+                }
+            };
 
-            {errorMsg && <div className="bg-rose-100 text-rose-700 p-3 rounded mb-4 text-xs font-medium">{errorMsg}</div>}
-            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 text-xs font-medium">{successMsg}</div>}
-            {devOtpInfo && <div className="bg-amber-100 text-amber-800 p-2 rounded mb-4 text-xs font-bold text-center">{devOtpInfo}</div>}
+            if (!user) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+                        <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl p-8 border border-slate-700">
+                            <div className="text-center mb-8">
+                                <div className="bg-primary text-w w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-white text-2xl font-bold shadow-lg mb-3">16A</div>
+                                <h1 className="text-2xl font-bold text-slate-900">NUANSA16A</h1>
+                                <p className="text-sm text-slate-500">Sistem Administrasi Warga Digital</p>
+                            </div>
+                            {loginError && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-200">{loginError}</div>}
+                            <form onSubmit={handleAdminLogin} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Email Super Admin</label>
+                                    <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none" placeholder="admin@nuansa16a.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                                    <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none" placeholder="••••••••••••" />
+                                </div>
+                                <button type="submit" className="w-full py-3 bg-primary hover:bg-teal-800 text-white font-semibold rounded-xl shadow-md transition duration-200">Masuk sebagai Super Admin</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
 
-            {/* FORM LOGIN ADMIN (EMAIL & PASSWORD) */}
-            {loginType === "admin" && (
-              <form onSubmit={handleLoginAdmin} className="space-y-4">
-                <label className="block text-sm font-semibold">Email Admin
-                  <input type="email" className="w-full border rounded-lg p-3 mt-1 text-sm" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@nuansa16a.com" required />
-                </label>
-                <label className="block text-sm font-semibold">Password Rahasia
-                  <input type="password" className="w-full border rounded-lg p-3 mt-1 text-sm" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••••••" required />
-                </label>
-                <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
-                  {loading ? "Memproses..." : "Masuk sebagai Admin"}
-                </button>
-              </form>
-            )}
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row">
+                    {/* Sidebar */}
+                    <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shadow-xl">
+                        <div>
+                            <div className="p-6 border-b border-slate-800 flex items-center space-x-3">
+                                <div className="bg-primary text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold">16A</div>
+                                <div>
+                                    <h2 className="font-bold text-white tracking-wide">NUANSA16A</h2>
+                                    <p className="text-xs text-teal-400 font-medium">RT 44 / RW 13 Karawang</p>
+                                </div>
+                            </div>
+                            <nav className="p-4 space-y-1.5 text-sm font-medium">
+                                <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'dashboard' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-chart-pie w-5"></i><span>Dashboard Eksekutif</span>
+                                </button>
+                                <button onClick={() => setActiveTab('warga')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'warga' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-users w-5"></i><span>Data Warga</span>
+                                </button>
+                                <button onClick={() => setActiveTab('pengurus')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'pengurus' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-user-tie w-5"></i><span>Data Pengurus</span>
+                                </button>
+                                <button onClick={() => setActiveTab('aset')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'aset' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-boxes-stacked w-5"></i><span>Data Aset</span>
+                                </button>
+                                <button onClick={() => setActiveTab('laporan')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'laporan' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-file-invoice-dollar w-5"></i><span>Laporan & Cetak</span>
+                                </button>
+                                <button onClick={() => setActiveTab('pengumuman')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'pengumuman' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-bullhorn w-5"></i><span>Pengumuman</span>
+                                </button>
+                                <button onClick={() => setActiveTab('audit')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'audit' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-shield-halved w-5"></i><span>Audit Log</span>
+                                </button>
+                                <button onClick={() => setActiveTab('backup')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition ${activeTab === 'backup' ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-800 text-slate-400'}`}>
+                                    <i className="fa-solid fa-database w-5"></i><span>Backup Database</span>
+                                </button>
+                            </nav>
+                        </div>
+                        <div className="p-4 border-t border-slate-800">
+                            <div className="mb-3 px-3">
+                                <p className="text-xs text-slate-400">Login sebagai:</p>
+                                <p className="text-sm font-semibold text-white truncate">{user.nama}</p>
+                            </div>
+                            <button onClick={() => setUser(null)} className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold shadow transition">Keluar</button>
+                        </div>
+                    </aside>
 
-            {/* FORM LOGIN PENGURUS & WARGA (WHATSAPP & OTP) */}
-            {(loginType === "pengurus" || loginType === "warga") && (
-              <div>
-                {!otpStep ? (
-                  <form onSubmit={handleRequestOtp} className="space-y-4">
-                    <label className="block text-sm font-semibold">Nomor WhatsApp Terdaftar
-                      <input type="text" className="w-full border rounded-lg p-3 mt-1 text-sm" value={noHp} onChange={e=>setNoHp(e.target.value)} placeholder="08123456789" required />
-                    </label>
-                    <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
-                      {loading ? "Mengirim..." : "Kirim Kode OTP WhatsApp"}
-                    </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyOtp} className="space-y-4">
-                    <label className="block text-sm font-semibold">Masukkan 6 Digit Kode OTP
-                      <input type="text" maxLength="6" className="w-full border rounded-lg p-3 mt-1 text-center tracking-widest text-lg font-bold" value={otp} onChange={e=>setOtp(e.target.value)} placeholder="123456" required />
-                    </label>
-                    <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold text-sm shadow">
-                      {loading ? "Verifikasi..." : "Verifikasi & Masuk"}
-                    </button>
-                    <button type="button" onClick={()=>setOtpStep(false)} className="w-full text-xs text-slate-500 hover:underline mt-2">Ganti Nomor WhatsApp</button>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+                    {/* Main Content */}
+                    <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+                        <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-10">
+                            <div className="flex items-center space-x-4 w-full sm:w-auto">
+                                <div className="relative w-full sm:w-80">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i className="fa-solid fa-magnifying-glass"></i></span>
+                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Pencarian global warga, aset..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-4 text-sm text-slate-600 font-medium">
+                                <div className="bg-teal-50 text-primary px-3 py-1.5 rounded-xl border border-teal-100 flex items-center space-x-2">
+                                    <i className="fa-regular fa-calendar"></i><span>{dateStr}</span> | <i className="fa-regular fa-clock"></i><span>{timeStr}</span>
+                                </div>
+                            </div>
+                        </header>
 
-  return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      <aside className="w-full md:w-64 bg-emerald-950 text-white flex flex-col">
-        <div className="p-5 text-center border-b border-emerald-800 flex items-center space-x-3">
-          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center font-bold text-emerald-900">16A</div>
-          <div className="text-left">
-            <h1 className="font-bold text-sm">NUANSA16A</h1>
-            <p className="text-[10px] text-emerald-300">Role: {loggedInUser.role}</p>
-          </div>
-        </div>
-        <nav className="flex-1 p-3 space-y-1 text-sm">
-          <button onClick={()=>setActiveMenu("Dashboard")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Dashboard"?"bg-emerald-700":""}`}>Dashboard</button>
-          <button onClick={()=>setActiveMenu("Warga")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Warga"?"bg-emerald-700":""}`}>Data Warga</button>
-          <button onClick={()=>setActiveMenu("Pengurus")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Pengurus"?"bg-emerald-700":""}`}>Data Pengurus</button>
-          {loggedInUser.role === "SUPER_ADMIN" && (
-            <button onClick={()=>setActiveMenu("Backup")} className={`w-full text-left px-3 py-2.5 rounded-lg ${activeMenu==="Backup"?"bg-emerald-700":""}`}>Backup Database</button>
-          )}
-        </nav>
-        <div className="p-4 border-t border-emerald-800">
-          <p className="text-xs mb-2">Login sebagai: <b>{loggedInUser.nama}</b></p>
-          <button onClick={()=>setLoggedInUser(null)} className="w-full bg-rose-600 p-2 rounded-lg text-xs font-semibold">Keluar</button>
-        </div>
-      </aside>
+                        <div className="p-6">
+                            {activeTab === 'dashboard' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                            <p className="text-sm font-medium text-slate-500">Total Kekayaan Lingkungan</p>
+                                            <h3 className="text-2xl font-bold text-primary mt-2">Rp {(stats.totalKekayaan || 0).toLocaleString()}</h3>
+                                            <p className="text-xs text-emerald-600 mt-1 font-semibold">Aktif & Terverifikasi Realtime</p>
+                                        </div>
+                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                            <p className="text-sm font-medium text-slate-500">Saldo Kas & Jimpitan</p>
+                                            <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {((stats.saldoKas || 0) + (stats.saldoJimpitan || 0)).toLocaleString()}</h3>
+                                            <p className="text-xs text-slate-400 mt-1">Kas: Rp {(stats.saldoKas || 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                            <p className="text-sm font-medium text-slate-500">Tabungan Cor & Sosial</p>
+                                            <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {((stats.saldoCor || 0) + (stats.saldoSosial || 0)).toLocaleString()}</h3>
+                                            <p className="text-xs text-slate-400 mt-1">Cor: Rp {(stats.saldoCor || 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                            <p className="text-sm font-medium text-slate-500">Nilai Total Aset</p>
+                                            <h3 className="text-2xl font-bold text-slate-800 mt-2">Rp {(stats.nilaiAset || 0).toLocaleString()}</h3>
+                                            <p className="text-xs text-slate-400 mt-1">Total {stats.totalAset || 0} unit aset</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-      <main className="flex-1 min-w-0 p-6">
-        <header className="bg-white shadow-sm p-4 rounded-xl mb-6 flex justify-between items-center">
-          <h2 className="font-bold text-xl text-emerald-800">{activeMenu}</h2>
-          <span className="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-semibold">Akses: {loggedInUser.role}</span>
-        </header>
+                            {activeTab === 'warga' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">Manajemen Data Warga</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-slate-600">
+                                            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-3">Nama Warga</th>
+                                                    <th className="p-3">NIK</th>
+                                                    <th className="p-3">Alamat</th>
+                                                    <th className="p-3">No HP</th>
+                                                    <th className="p-3">Kategori</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {members.map(m => (
+                                                    <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                        <td className="p-3 font-medium text-slate-800">{m.nama}</td>
+                                                        <td className="p-3">{m.nik || '-'}</td>
+                                                        <td className="p-3">{m.alamat || '-'}</td>
+                                                        <td className="p-3">{m.no_hp || '-'}</td>
+                                                        <td className="p-3"><span className="px-2.5 py-1 bg-teal-50 text-primary rounded-lg text-xs font-semibold">{m.kategori || 'Warga Tetap'}</span></td>
+                                                    </tr>
+                                                ))}
+                                                {members.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400">Belum ada data warga.</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
-        {activeMenu === "Dashboard" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
-              <h3 className="font-bold text-slate-500 text-xs">Total Warga Terdaftar</h3>
-              <p className="text-2xl font-bold mt-2">{members.length} Orang</p>
-            </div>
-            <div className="bg-white p-5 rounded-xl shadow border-l-4 border-emerald-600">
-              <h3 className="font-bold text-slate-500 text-xs">Total Pengurus Aktif</h3>
-              <p className="text-2xl font-bold mt-2">{leaders.length} Orang</p>
-            </div>
-          </div>
-        )}
+                            {activeTab === 'aset' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">Data Aset Lingkungan</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-slate-600">
+                                            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-3">Nama Aset</th>
+                                                    <th className="p-3">Kategori</th>
+                                                    <th className="p-3">Nilai Pembelian</th>
+                                                    <th className="p-3">Kondisi</th>
+                                                    <th className="p-3">Lokasi</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {assets.map(a => (
+                                                    <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                        <td className="p-3 font-medium text-slate-800">{a.nama_aset}</td>
+                                                        <td className="p-3">{a.kategori}</td>
+                                                        <td className="p-3">Rp {(a.nilai_pembelian || 0).toLocaleString()}</td>
+                                                        <td className="p-3"><span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold">{a.kondisi || 'Baik'}</span></td>
+                                                        <td className="p-3">{a.lokasi || '-'}</td>
+                                                    </tr>
+                                                ))}
+                                                {assets.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400">Belum ada data aset tercatat.</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
-        {activeMenu === "Warga" && (
-          <div className="bg-white p-6 rounded-xl shadow space-y-4">
-            <h3 className="font-bold text-lg">Daftar Warga Warga Nuansa 16A</h3>
-            {loggedInUser.role === "SUPER_ADMIN" && (
-              <p className="text-xs text-emerald-600 font-semibold">* Admin dapat mendaftarkan nomor WhatsApp warga di sini agar bisa login.</p>
-            )}
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-100">
-                <tr><th className="p-3">Nama</th><th className="p-3">Alamat</th><th className="p-3">No WhatsApp</th><th className="p-3">Kategori</th></tr>
-              </thead>
-              <tbody>
-                {members.map(m=>(
-                  <tr key={m.id} className="border-b">
-                    <td className="p-3 font-semibold">{m.nama}</td>
-                    <td className="p-3">{m.alamat}</td>
-                    <td className="p-3">{m.no_hp}</td>
-                    <td className="p-3">{m.kategori}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                            {activeTab === 'audit' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">Audit Log Aktivitas Sistem</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-slate-600">
+                                            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-3">Waktu</th>
+                                                    <th className="p-3">Aksi</th>
+                                                    <th className="p-3">Pelaku</th>
+                                                    <th className="p-3">Detail</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {auditLogs.map(l => (
+                                                    <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                        <td className="p-3 text-slate-500">{l.waktu}</td>
+                                                        <td className="p-3 font-semibold text-primary">{l.aksi}</td>
+                                                        <td className="p-3">{l.pelaku}</td>
+                                                        <td className="p-3">{l.detail}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
-        {activeMenu === "Backup" && loggedInUser.role === "SUPER_ADMIN" && (
-          <div className="bg-white p-6 rounded-xl shadow space-y-4">
-            <h3 className="font-bold text-lg">Backup Database SQLite</h3>
-            <a href="/api/admin/backup" target="_blank" className="inline-block bg-emerald-600 text-white px-5 py-3 rounded-lg font-bold text-sm">Unduh Backup Database (.sqlite)</a>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+                            {activeTab === 'backup' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 max-w-xl">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-2">Backup Database</h3>
+                                    <p className="text-sm text-slate-500 mb-6">Unduh salinan cadangan database SQLite untuk keamanan data lingkungan.</p>
+                                    <a href="/api/admin/backup" className="inline-flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-teal-800 text-white font-semibold rounded-xl shadow transition">
+                                        <i className="fa-solid fa-download"></i><span>Download Backup SQLite</span>
+                                    </a>
+                                </div>
+                            )}
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
+                            {activeTab === 'laporan' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">Laporan & Cetak Keuangan</h3>
+                                    <p className="text-sm text-slate-500">Pilih filter periode atau kategori transaksi untuk melakukan preview maupun export laporan.</p>
+                                </div>
+                            )}
+
+                            {activeTab === 'pengumuman' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">Pengumuman Warga</h3>
+                                    <div className="space-y-4">
+                                        {announcements.map(an => (
+                                            <div key={an.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                                <h4 className="font-bold text-slate-800 text-base">{an.judul}</h4>
+                                                <p className="text-sm text-slate-600 mt-1">{an.isi}</p>
+                                                <p className="text-xs text-slate-400 mt-2">{an.tanggal}</p>
+                                            </div>
+                                        ))}
+                                        {announcements.length === 0 && <p className="text-sm text-slate-400">Belum ada pengumuman aktif.</p>}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
 </body>
 </html>
