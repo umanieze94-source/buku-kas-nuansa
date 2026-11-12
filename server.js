@@ -107,7 +107,11 @@ async function initDatabase() {
             nama TEXT NOT NULL,
             alamat TEXT,
             no_hp TEXT UNIQUE,
-            kategori TEXT
+            kategori TEXT,
+            status_iuran TEXT DEFAULT 'Belum Bayar',
+            tabungan_cor REAL DEFAULT 0,
+            tunggakan REAL DEFAULT 0,
+            keterangan TEXT
         );
 
         CREATE TABLE IF NOT EXISTS keuangan (
@@ -158,7 +162,6 @@ async function initDatabase() {
             `INSERT INTO users (email, password, role, nama) VALUES (?, ?, ?, ?)`,
             [adminEmail, hash, 'SUPER_ADMIN', 'Super Admin Utama']
         );
-        console.log('Akun Super Admin berhasil diinisialisasi.');
     }
 }
 
@@ -178,7 +181,7 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
     });
 }));
 
-// DASHBOARD STATS & EXECUTIVE SUMMARY
+// DASHBOARD STATS
 app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const membersCount = await get('SELECT COUNT(*) as cnt FROM members');
     const leadersCount = await get('SELECT COUNT(*) as cnt FROM leaders');
@@ -219,13 +222,16 @@ app.get('/api/members', asyncRoute(async (req, res) => {
 }));
 
 app.post('/api/members', asyncRoute(async (req, res) => {
-    const { nik, nama, alamat, no_hp, kategori, actor } = req.body;
-    await run('INSERT INTO members (nik, nama, alamat, no_hp, kategori) VALUES (?, ?, ?, ?, ?)', [nik, nama, alamat, no_hp, kategori]);
+    const { nik, nama, alamat, no_hp, kategori, status_iuran, tabungan_cor, tunggakan, keterangan, actor } = req.body;
+    await run(
+        `INSERT INTO members (nik, nama, alamat, no_hp, kategori, status_iuran, tabungan_cor, tunggakan, keterangan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nik, nama, alamat, no_hp, kategori, status_iuran || 'Belum Bayar', tabungan_cor || 0, tunggakan || 0, keterangan]
+    );
     await logAudit('TAMBAH WARGA', actor || 'Admin', `Menambahkan warga: ${nama}`);
     res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
 }));
 
-// PENGURUS
+// PENGURUS & ASET & LAINNYA
 app.get('/api/leaders', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM leaders ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -238,21 +244,6 @@ app.post('/api/leaders', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Pengurus berhasil ditambahkan.' });
 }));
 
-// KEUANGAN / TRANSAKSI
-app.get('/api/keuangan', asyncRoute(async (req, res) => {
-    const rows = await all('SELECT * FROM keuangan ORDER BY id DESC');
-    res.json({ success: true, data: rows });
-}));
-
-app.post('/api/keuangan', asyncRoute(async (req, res) => {
-    const { kategori_transaksi, tanggal, uraian, masuk, keluar, actor } = req.body;
-    await run('INSERT INTO keuangan (kategori_transaksi, tanggal, uraian, masuk, keluar, input_oleh) VALUES (?, ?, ?, ?, ?, ?)',
-        [kategori_transaksi, tanggal, uraian, masuk || 0, keluar || 0, actor || 'Admin']);
-    await logAudit('TAMBAH TRANSAKSI', actor || 'Admin', `Transaksi [${kategori_transaksi}] Rp ${(masuk || keluar).toLocaleString()}`);
-    res.json({ success: true, message: 'Transaksi berhasil disimpan.' });
-}));
-
-// ASET LINGKUNGAN
 app.get('/api/assets', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM assets ORDER BY id DESC');
     res.json({ success: true, data: rows });
@@ -266,7 +257,6 @@ app.post('/api/assets', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Aset berhasil dicatat.' });
 }));
 
-// PENGUMUMAN
 app.get('/api/announcements', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM announcements ORDER BY id DESC');
     res.json({ success: true, data: rows });
@@ -279,13 +269,11 @@ app.post('/api/announcements', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Pengumuman berhasil dipublikasikan.' });
 }));
 
-// AUDIT LOG
 app.get('/api/audit-logs', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100');
     res.json({ success: true, data: rows });
 }));
 
-// BACKUP & RESTORE
 app.get('/api/admin/backup', asyncRoute(async (req, res) => {
     const filename = `backup-nuansa16a-${new Date().toISOString().slice(0,10)}.sqlite`;
     const destination = path.join(BACKUP_DIR, filename);
