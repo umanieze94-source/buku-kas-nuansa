@@ -37,12 +37,13 @@
             const [members, setMembers] = React.useState([]);
             const [leaders, setLeaders] = React.useState([]);
             const [assets, setAssets] = React.useState([]);
+            const [keuangan, setKeuangan] = React.useState([]);
             const [auditLogs, setAuditLogs] = React.useState([]);
             const [searchQuery, setSearchQuery] = React.useState('');
             const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
             // Login State Selection
-            const [loginMode, setLoginMode] = React.useState('admin'); // 'admin', 'pengurus', 'warga'
+            const [loginMode, setLoginMode] = React.useState('admin');
             const [loginEmail, setLoginEmail] = React.useState('');
             const [loginPassword, setLoginPassword] = React.useState('');
             
@@ -59,9 +60,18 @@
             const [showModalWarga, setShowModalWarga] = React.useState(false);
             const [formWarga, setFormWarga] = React.useState({ nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
 
+            // Modal Input Keuangan (Kas Warga / Cor Jalan / Jimpitan)
+            const [showModalKeuangan, setShowModalKeuangan] = React.useState(false);
+            const [formKeuangan, setFormKeuangan] = React.useState({
+                kategori_transaksi: 'Kas',
+                tanggal: new Date().toISOString().slice(0, 10),
+                uraian: '',
+                jenis: 'masuk',
+                nominal: 0
+            });
+
             const [timeStr, setTimeStr] = React.useState('');
             const [dateStr, setDateStr] = React.useState('');
-            const logoUrl = "https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&auto=format&fit=crop&q=80";
 
             React.useEffect(() => {
                 const timer = setInterval(() => {
@@ -89,6 +99,10 @@
                     const resAsset = await fetch('/api/assets');
                     const dAsset = await resAsset.json();
                     if (dAsset.success) setAssets(dAsset.data);
+
+                    const resKeu = await fetch('/api/keuangan');
+                    const dKeu = await resKeu.json();
+                    if (dKeu.success) setKeuangan(dKeu.data);
 
                     const resAudit = await fetch('/api/audit-logs');
                     const dAudit = await resAudit.json();
@@ -141,7 +155,7 @@
                     if (data.success) {
                         setOtpSent(true);
                         setLoginMessage(data.message);
-                        if(data.dev_otp) setDevOtpInfo(data.dev_otp); // Info bantuan OTP saat testing
+                        if(data.dev_otp) setDevOtpInfo(data.dev_otp);
                     } else {
                         setLoginError(data.message);
                     }
@@ -190,6 +204,43 @@
                 }
             };
 
+            const openModalKeuangan = (kategori) => {
+                setFormKeuangan({
+                    kategori_transaksi: kategori,
+                    tanggal: new Date().toISOString().slice(0, 10),
+                    uraian: '',
+                    jenis: 'masuk',
+                    nominal: 0
+                });
+                setShowModalKeuangan(true);
+            };
+
+            const handleSaveKeuangan = async (e) => {
+                e.preventDefault();
+                try {
+                    const payload = {
+                        kategori_transaksi: formKeuangan.kategori_transaksi,
+                        tanggal: formKeuangan.tanggal,
+                        uraian: formKeuangan.uraian,
+                        masuk: formKeuangan.jenis === 'masuk' ? Number(formKeuangan.nominal) : 0,
+                        keluar: formKeuangan.jenis === 'keluar' ? Number(formKeuangan.nominal) : 0,
+                        input_oleh: user.nama
+                    };
+                    const res = await fetch('/api/keuangan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        setShowModalKeuangan(false);
+                        fetchData();
+                    }
+                } catch (err) {
+                    alert('Gagal menyimpan transaksi');
+                }
+            };
+
             if (!user) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-darker px-4 py-8">
@@ -200,7 +251,6 @@
                                 <p className="text-xs font-semibold text-primary mt-1">Sistem Administrasi Warga Digital</p>
                             </div>
 
-                            {/* Pilihan Mode Login */}
                             <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-2xl text-xs font-bold text-center">
                                 <button type="button" onClick={() => { setLoginMode('admin'); setOtpSent(false); setLoginError(''); }} className={`py-2 rounded-xl transition ${loginMode === 'admin' ? 'bg-primary text-white shadow' : 'text-slate-600'}`}>Admin</button>
                                 <button type="button" onClick={() => { setLoginMode('pengurus'); setOtpSent(false); setLoginError(''); }} className={`py-2 rounded-xl transition ${loginMode === 'pengurus' ? 'bg-primary text-white shadow' : 'text-slate-600'}`}>Pengurus</button>
@@ -216,7 +266,6 @@
                                 </div>
                             )}
 
-                            {/* 1. FORM LOGIN ADMIN */}
                             {loginMode === 'admin' && (
                                 <form onSubmit={handleAdminLogin} className="space-y-4">
                                     <div>
@@ -231,7 +280,6 @@
                                 </form>
                             )}
 
-                            {/* 2 & 3. FORM LOGIN PENGURUS / WARGA (WHATSAPP + OTP) */}
                             {(loginMode === 'pengurus' || loginMode === 'warga') && (
                                 <div>
                                     {!otpSent ? (
@@ -259,10 +307,65 @@
                 );
             }
 
+            const canEdit = user.role === 'SUPER_ADMIN' || user.role === 'PENGURUS';
             const filteredMembers = members.filter(m => 
                 m.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
                 (m.alamat && m.alamat.toLowerCase().includes(searchQuery.toLowerCase()))
             );
+
+            // Helper render tabel keuangan
+            const renderKeuanganTab = (kategoriKode, judul, subjudul, saldoSaatIni) => {
+                const listTrx = keuangan.filter(k => k.kategori_transaksi === kategoriKode && 
+                    (k.uraian && k.uraian.toLowerCase().includes(searchQuery.toLowerCase()) || searchQuery === '')
+                );
+                return (
+                    <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                            <div>
+                                <h3 className="text-lg font-black text-darker">{judul}</h3>
+                                <p className="text-xs text-slate-500">{subjudul}</p>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                                    <span className="text-xs text-slate-500 block">Saldo Terkumpul:</span>
+                                    <span className="text-base font-black text-primary">Rp {(saldoSaatIni || 0).toLocaleString()}</span>
+                                </div>
+                                {canEdit && (
+                                    <button onClick={() => openModalKeuangan(kategoriKode)} className="px-5 py-3 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
+                                        <i className="fa-solid fa-plus"></i><span>Catat Transaksi</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-slate-600">
+                                <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th className="p-3.5 rounded-l-xl">Tanggal</th>
+                                        <th className="p-3.5">Uraian / Keterangan</th>
+                                        <th className="p-3.5">Pemasukan</th>
+                                        <th className="p-3.5">Pengeluaran</th>
+                                        <th className="p-3.5 rounded-r-xl">Dicatat Oleh</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {listTrx.map(t => (
+                                        <tr key={t.id} className="border-b border-slate-100 hover:bg-emerald-50/30 transition">
+                                            <td className="p-3.5 font-semibold text-slate-700">{t.tanggal}</td>
+                                            <td className="p-3.5">{t.uraian}</td>
+                                            <td className="p-3.5 font-bold text-emerald-600">{t.masuk > 0 ? `+ Rp ${t.masuk.toLocaleString()}` : '-'}</td>
+                                            <td className="p-3.5 font-bold text-red-600">{t.keluar > 0 ? `- Rp ${t.keluar.toLocaleString()}` : '-'}</td>
+                                            <td className="p-3.5 text-xs text-slate-500">{t.input_oleh}</td>
+                                        </tr>
+                                    ))}
+                                    {listTrx.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row bg-bgapp">
@@ -290,6 +393,15 @@
                             <nav className="p-4 space-y-1.5 text-sm font-medium">
                                 <button onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'dashboard' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
                                     <i className="fa-solid fa-chart-pie w-5 text-success"></i><span>Dashboard Eksekutif</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('kas'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'kas' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
+                                    <i className="fa-solid fa-wallet w-5 text-success"></i><span>Kas Warga</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('cor'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'cor' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
+                                    <i className="fa-solid fa-road w-5 text-success"></i><span>Iuran Cor Jalan</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('jimpitan'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'jimpitan' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
+                                    <i className="fa-solid fa-coins w-5 text-success"></i><span>Jimpitan</span>
                                 </button>
                                 <button onClick={() => { setActiveTab('warga'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'warga' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
                                     <i className="fa-solid fa-users w-5 text-success"></i><span>Data Warga</span>
@@ -324,7 +436,7 @@
                             <div className="flex items-center space-x-4 w-full sm:w-auto">
                                 <div className="relative w-full sm:w-80">
                                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i className="fa-solid fa-magnifying-glass"></i></span>
-                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari warga, alamat..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary shadow-inner" />
+                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari warga, alamat, transaksi..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary shadow-inner" />
                                 </div>
                             </div>
                             <div className="flex items-center space-x-4 text-xs sm:text-sm text-slate-600 font-semibold">
@@ -340,23 +452,23 @@
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                                         <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pengeluaran</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-red-600 mt-2">Rp 0</h3>
+                                            <h3 className="text-xl sm:text-2xl font-black text-red-600 mt-2">Rp {(stats.totalPengeluaran || 0).toLocaleString()}</h3>
                                             <p className="text-xs text-slate-500 mt-1">Total pengeluaran kas</p>
                                         </div>
-                                        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
+                                        <div onClick={() => setActiveTab('kas')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo Total Kas</p>
                                             <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoKas || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-success mt-1 font-bold">Aktif Realtime</p>
+                                            <p className="text-xs text-success mt-1 font-bold">Klik untuk detail Kas →</p>
                                         </div>
-                                        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
+                                        <div onClick={() => setActiveTab('cor')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Saldo Cor Jalan</p>
                                             <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoCor || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-slate-500 mt-1">Tabungan Cor</p>
+                                            <p className="text-xs text-primary mt-1 font-bold">Klik untuk detail Cor →</p>
                                         </div>
-                                        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
+                                        <div onClick={() => setActiveTab('jimpitan')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo Jimpitan</p>
                                             <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoJimpitan || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-slate-500 mt-1">Jimpitan warga</p>
+                                            <p className="text-xs text-primary mt-1 font-bold">Klik untuk Jimpitan →</p>
                                         </div>
                                         <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Agenda Kegiatan Gang</p>
@@ -366,6 +478,10 @@
                                     </div>
                                 </div>
                             )}
+
+                            {activeTab === 'kas' && renderKeuanganTab('Kas', 'Kas Warga NUANSA 16A', 'Pencatatan pemasukan iuran rutin bulanan & pengeluaran operasional warga.', stats.saldoKas)}
+                            {activeTab === 'cor' && renderKeuanganTab('Tabungan Cor', 'Iuran & Tabungan Cor Jalan', 'Dana khusus perbaikan dan pengecoran jalan lingkungan Blok C3 / C8.', stats.saldoCor)}
+                            {activeTab === 'jimpitan' && renderKeuanganTab('Jimpitan', 'Dana Jimpitan Warga', 'Rekapitulasi pengumpulan dan pemanfaatan dana jimpitan harian/mingguan warga.', stats.saldoJimpitan)}
 
                             {activeTab === 'warga' && (
                                 <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
@@ -488,6 +604,43 @@
                         </div>
                     </main>
 
+                    {/* MODAL INPUT TRANSAKSI KEUANGAN */}
+                    {showModalKeuangan && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-100">
+                                <h3 className="text-lg font-black text-darker mb-1">Catat Transaksi {formKeuangan.kategori_transaksi}</h3>
+                                <p className="text-xs text-slate-500 mb-4">Masukkan detail pemasukan atau pengeluaran baru.</p>
+                                <form onSubmit={handleSaveKeuangan} className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1">Tanggal</label>
+                                            <input type="date" required value={formKeuangan.tanggal} onChange={e => setFormKeuangan({...formKeuangan, tanggal: e.target.value})} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1">Jenis Transaksi</label>
+                                            <select value={formKeuangan.jenis} onChange={e => setFormKeuangan({...formKeuangan, jenis: e.target.value})} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
+                                                <option value="masuk">Pemasukan (+)</option>
+                                                <option value="keluar">Pengeluaran (-)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nominal (Rp)</label>
+                                        <input type="number" required min="1" value={formKeuangan.nominal} onChange={e => setFormKeuangan({...formKeuangan, nominal: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Contoh: 50000" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Uraian / Keterangan</label>
+                                        <input type="text" required value={formKeuangan.uraian} onChange={e => setFormKeuangan({...formKeuangan, uraian: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Contoh: Iuran Kas Blok C3/01" />
+                                    </div>
+                                    <div className="flex justify-end space-x-3 pt-4">
+                                        <button type="button" onClick={() => setShowModalKeuangan(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
+                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Transaksi</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     {/* MODAL INPUT WARGA */}
                     {showModalWarga && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -521,7 +674,7 @@
                                             <input type="number" value={formWarga.tabungan_cor} onChange={e => setFormWarga({...formWarga, tabungan_cor: Number(e.target.value)})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2اج">
+                                    <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-600 mb-1">Tunggakan (Rp)</label>
                                             <input type="number" value={formWarga.tunggakan} onChange={e => setFormWarga({...formWarga, tunggakan: Number(e.target.value)})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
