@@ -7,13 +7,20 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const https = require('https');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-const DB_PATH = path.join(__dirname, 'database.sqlite');
-const BACKUP_DIR = path.join(__dirname, 'backups');
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// Path Database untuk Railway (Mendukung Persistent Volume di /app/data atau direktori lokal)
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname);
+if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -81,6 +88,44 @@ async function logAudit(aksi, pelaku, detail) {
     } catch (e) {
         console.error('Gagal mencatat audit log:', e);
     }
+}
+
+// Fungsi KIRIM WA OTP ASLI (Contoh Integrasi Fonnte / WhatsApp Gateway)
+async function sendWhatsAppMessage(target, message) {
+    const token = process.env.WHATSAPP_API_TOKEN; // Set di Environment Variable Railway jika punya
+    if (!token) {
+        console.log(`[SIMULASI WA] Ke ${target}: ${message}`);
+        return true;
+    }
+
+    return new Promise((resolve) => {
+        const data = JSON.stringify({ target, message });
+        const options = {
+            hostname: 'api.fonnte.com',
+            port: 443,
+            path: '/send',
+            method: 'POST',
+            headers: {
+                'Authorization': token,
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => resolve(true));
+        });
+
+        req.on('error', (e) => {
+            console.error('Gagal kirim WA:', e);
+            resolve(false);
+        });
+
+        req.write(data);
+        req.end();
+    });
 }
 
 async function initDatabase() {
@@ -197,7 +242,7 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
     });
 }));
 
-// REQUEST OTP
+// REQUEST OTP WHATSAPP
 app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
     const { no_hp, role_target } = req.body;
     
@@ -217,7 +262,10 @@ app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
     await run('DELETE FROM otp_codes WHERE no_hp = ?', [no_hp]);
     await run('INSERT INTO otp_codes (no_hp, otp, expires_at) VALUES (?, ?, ?)', [no_hp, otp, expiresAt]);
 
-    res.json({ success: true, message: 'Kode OTP WhatsApp terkirim.', dev_otp: otp });
+    const pesanWA = `[NUANSA 16A] Kode OTP verifikasi login Anda adalah: *${otp}*. Berlaku selama 5 menit. Jangan bagikan kode ini kepada siapapun.`;
+    await sendWhatsAppMessage(no_hp, pesanWA);
+
+    res.json({ success: true, message: 'Kode OTP berhasil dikirim ke nomor WhatsApp Anda.', dev_otp: otp });
 }));
 
 // VERIFY OTP
@@ -299,7 +347,6 @@ app.put('/api/keuangan/konfirmasi-cor/:id', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Dana cor jalan berhasil dikonfirmasi diterima.' });
 }));
 
-// PENCATATAN PENGELUARAN KAS
 app.post('/api/keuangan/keluar', asyncRoute(async (req, res) => {
     const { tanggal, uraian, keluar, input_oleh } = req.body;
     await run(
@@ -310,7 +357,6 @@ app.post('/api/keuangan/keluar', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Pengeluaran berhasil dicatat.' });
 }));
 
-// JIMPITAN
 app.post('/api/jimpitan', asyncRoute(async (req, res) => {
     const { tanggal, bulan_tahun, nominal, keterangan, actor } = req.body;
     await run(
@@ -321,7 +367,7 @@ app.post('/api/jimpitan', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Jimpitan berhasil dicatat.' });
 }));
 
-// LEADERS (PENGURUS)
+// LEADERS
 app.get('/api/leaders', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM leaders ORDER BY id');
     res.json({ success: true, data: rows });
@@ -334,12 +380,7 @@ app.post('/api/leaders', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Pengurus berhasil ditambahkan.' });
 }));
 
-app.delete('/api/leaders/:id', asyncRoute(async (req, res) => {
-    await run('DELETE FROM leaders WHERE id = ?', [req.params.id]);
-    res.json({ success: true, message: 'Pengurus dihapus.' });
-}));
-
-// MEMBERS (WARGA)
+// MEMBERS (WARGA) - LENGKAP DENGAN EDIT KHUSUS ADMIN
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nomor_rumah ASC');
     res.json({ success: true, data: rows });
@@ -362,8 +403,8 @@ app.put('/api/members/:id', asyncRoute(async (req, res) => {
         `UPDATE members SET nik = ?, nama = ?, nomor_rumah = ?, alamat = ?, no_hp = ?, kategori = ?, status_iuran = ?, tabungan_cor = ?, tunggakan = ?, keterangan = ? WHERE id = ?`,
         [nik, nama, nomor_rumah, alamat, no_hp, kategori, status_iuran, Number(tabungan_cor) || 0, Number(tunggakan) || 0, keterangan, id]
     );
-    await logAudit('EDIT WARGA', actor || 'Admin', `Update warga No. ${nomor_rumah}`);
-    res.json({ success: true, message: 'Data warga diperbarui.' });
+    await logAudit('EDIT WARGA', actor || 'Admin', `Update data warga No. ${nomor_rumah} (${nama})`);
+    res.json({ success: true, message: 'Data warga berhasil diperbarui.' });
 }));
 
 app.delete('/api/members/:id', asyncRoute(async (req, res) => {
@@ -401,11 +442,6 @@ app.post('/api/agendas', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Agenda berhasil ditambah.' });
 }));
 
-app.delete('/api/agendas/:id', asyncRoute(async (req, res) => {
-    await run('DELETE FROM agendas WHERE id = ?', [req.params.id]);
-    res.json({ success: true, message: 'Agenda dihapus.' });
-}));
-
 // AUDIT LOGS & BACKUP
 app.get('/api/audit-logs', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100');
@@ -416,7 +452,7 @@ app.get('/api/admin/backup', asyncRoute(async (req, res) => {
     const filename = `backup-nuansa16a-${new Date().toISOString().slice(0,10)}.sqlite`;
     const destination = path.join(BACKUP_DIR, filename);
     db.backup(destination, err => {
-        if (err) return res.status(500).json({ success: false, message: 'Gagal backup.' });
+        if (err) return res.status(500).json({ success: false, message: 'Gagal backup database.' });
         res.download(destination, filename);
     });
 }));
