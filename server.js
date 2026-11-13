@@ -142,6 +142,18 @@ async function initDatabase() {
             keterangan TEXT
         );
 
+        -- TABEL TAMBAHAN AGENDA WARGA (AMAN & TERISOLASI)
+        CREATE TABLE IF NOT EXISTS agendas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            judul TEXT NOT NULL,
+            tanggal TEXT NOT NULL,
+            waktu TEXT,
+            lokasi TEXT,
+            kategori TEXT DEFAULT 'Umum',
+            deskripsi TEXT,
+            pembuat TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             aksi TEXT NOT NULL,
@@ -331,6 +343,30 @@ app.post('/api/assets', asyncRoute(async (req, res) => {
     await logAudit('TAMBAH ASET', actor || 'Admin', `Mencatat aset: ${nama_aset}`);
     res.json({ success: true, message: 'Aset berhasil dicatat.' });
 }));
+
+// --- ENDPOINT AGENDA WARGA BARU ---
+app.get('/api/agendas', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM agendas ORDER BY tanggal ASC');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/agendas', asyncRoute(async (req, res) => {
+    const { judul, tanggal, waktu, lokasi, kategori, deskripsi, actor } = req.body;
+    await run(
+        'INSERT INTO agendas (judul, tanggal, waktu, lokasi, kategori, deskripsi, pembuat) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [judul, tanggal, waktu, lokasi, kategori || 'Umum', deskripsi, actor || 'Admin']
+    );
+    await logAudit('TAMBAH AGENDA', actor || 'Admin', `Menambahkan agenda warga: ${judul} (${tanggal})`);
+    res.json({ success: true, message: 'Agenda berhasil ditambahkan.' });
+}));
+
+app.delete('/api/agendas/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    await run('DELETE FROM agendas WHERE id = ?', [id]);
+    await logAudit('HAPUS AGENDA', 'Admin', `Menghapus agenda ID: ${id}`);
+    res.json({ success: true, message: 'Agenda berhasil dihapus.' });
+}));
+// ---------------------------------
 
 app.get('/api/audit-logs', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100');
