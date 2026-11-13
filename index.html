@@ -60,7 +60,11 @@
             const [showModalWarga, setShowModalWarga] = React.useState(false);
             const [formWarga, setFormWarga] = React.useState({ nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
 
-            // Modal Input Keuangan (Kas Warga / Cor Jalan / Jimpitan)
+            // Modal Input Pengurus (Admin Only)
+            const [showModalLeader, setShowModalLeader] = React.useState(false);
+            const [formLeader, setFormLeader] = React.useState({ nama: '', jabatan: 'Pengurus Gang', no_hp: '', pic_modul: 'Kas Gang' });
+
+            // Modal Input Keuangan
             const [showModalKeuangan, setShowModalKeuangan] = React.useState(false);
             const [formKeuangan, setFormKeuangan] = React.useState({
                 kategori_transaksi: 'Kas',
@@ -204,6 +208,35 @@
                 }
             };
 
+            const handleSaveLeader = async (e) => {
+                e.preventDefault();
+                try {
+                    const res = await fetch('/api/leaders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...formLeader, actor: user.nama })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        setShowModalLeader(false);
+                        setFormLeader({ nama: '', jabatan: 'Pengurus Gang', no_hp: '', pic_modul: 'Kas Gang' });
+                        fetchData();
+                    }
+                } catch (err) {
+                    alert('Gagal menyimpan pengurus');
+                }
+            };
+
+            const handleDeleteLeader = async (id) => {
+                if(!confirm('Hapus data pengurus ini?')) return;
+                try {
+                    await fetch(`/api/leaders/${id}`, { method: 'DELETE' });
+                    fetchData();
+                } catch (e) {
+                    alert('Gagal menghapus pengurus');
+                }
+            };
+
             const openModalKeuangan = (kategori) => {
                 setFormKeuangan({
                     kategori_transaksi: kategori,
@@ -313,7 +346,6 @@
                 (m.alamat && m.alamat.toLowerCase().includes(searchQuery.toLowerCase()))
             );
 
-            // Helper render tabel keuangan
             const renderKeuanganTab = (kategoriKode, judul, subjudul, saldoSaatIni) => {
                 const listTrx = keuangan.filter(k => k.kategori_transaksi === kategoriKode && 
                     (k.uraian && k.uraian.toLowerCase().includes(searchQuery.toLowerCase()) || searchQuery === '')
@@ -332,7 +364,7 @@
                                 </div>
                                 {canEdit && (
                                     <button onClick={() => openModalKeuangan(kategoriKode)} className="px-5 py-3 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
-                                        <i className="fa-solid fa-plus"></i><span>Catat Transaksi</span>
+                                        <i className="fa-solid fa-plus"></i><span>Catat Transaksi (PIC)</span>
                                     </button>
                                 )}
                             </div>
@@ -346,7 +378,7 @@
                                         <th className="p-3.5">Uraian / Keterangan</th>
                                         <th className="p-3.5">Pemasukan</th>
                                         <th className="p-3.5">Pengeluaran</th>
-                                        <th className="p-3.5 rounded-r-xl">Dicatat Oleh</th>
+                                        <th className="p-3.5 rounded-r-xl">PIC (Dicatat Oleh)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -356,7 +388,7 @@
                                             <td className="p-3.5">{t.uraian}</td>
                                             <td className="p-3.5 font-bold text-emerald-600">{t.masuk > 0 ? `+ Rp ${t.masuk.toLocaleString()}` : '-'}</td>
                                             <td className="p-3.5 font-bold text-red-600">{t.keluar > 0 ? `- Rp ${t.keluar.toLocaleString()}` : '-'}</td>
-                                            <td className="p-3.5 text-xs text-slate-500">{t.input_oleh}</td>
+                                            <td className="p-3.5 text-xs text-slate-500 font-medium">{t.input_oleh}</td>
                                         </tr>
                                     ))}
                                     {listTrx.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>}
@@ -393,6 +425,9 @@
                             <nav className="p-4 space-y-1.5 text-sm font-medium">
                                 <button onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'dashboard' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
                                     <i className="fa-solid fa-chart-pie w-5 text-success"></i><span>Dashboard Eksekutif</span>
+                                </button>
+                                <button onClick={() => { setActiveTab('pengurus'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'pengurus' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
+                                    <i className="fa-solid fa-user-tie w-5 text-success"></i><span>Data Pengurus & PIC</span>
                                 </button>
                                 <button onClick={() => { setActiveTab('kas'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'kas' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
                                     <i className="fa-solid fa-wallet w-5 text-success"></i><span>Kas Warga</span>
@@ -436,7 +471,7 @@
                             <div className="flex items-center space-x-4 w-full sm:w-auto">
                                 <div className="relative w-full sm:w-80">
                                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i className="fa-solid fa-magnifying-glass"></i></span>
-                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari warga, alamat, transaksi..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary shadow-inner" />
+                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari data..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary shadow-inner" />
                                 </div>
                             </div>
                             <div className="flex items-center space-x-4 text-xs sm:text-sm text-slate-600 font-semibold">
@@ -475,6 +510,53 @@
                                             <h3 className="text-xl sm:text-2xl font-black text-primary mt-2">Aktif</h3>
                                             <p className="text-xs text-slate-500 mt-1">RT 44 / RW 13 C3/C8</p>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* MENU DATA PENGURUS */}
+                            {activeTab === 'pengurus' && (
+                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                                        <div>
+                                            <h3 className="text-lg font-black text-darker">Data Pengurus & PIC Modul Keuangan</h3>
+                                            <p className="text-xs text-slate-500">Daftar pengurus resmi lingkungan RT 44 / RW 13 Blok C3/C8.</p>
+                                        </div>
+                                        {user.role === 'SUPER_ADMIN' && (
+                                            <button onClick={() => setShowModalLeader(true)} className="px-5 py-2.5 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
+                                                <i className="fa-solid fa-user-plus"></i><span>Tambah Pengurus Baru</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-slate-600">
+                                            <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
+                                                <tr>
+                                                    <th className="p-3.5 rounded-l-xl">Nama Pengurus</th>
+                                                    <th className="p-3.5">Jabatan / Peran</th>
+                                                    <th className="p-3.5">No WhatsApp (Login OTP)</th>
+                                                    <th className="p-3.5">PIC Modul Input</th>
+                                                    {user.role === 'SUPER_ADMIN' && <th className="p-3.5 rounded-r-xl text-center">Aksi</th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {leaders.map(l => (
+                                                    <tr key={l.id} className="border-b border-slate-100 hover:bg-emerald-50/30 transition">
+                                                        <td className="p-3.5 font-bold text-slate-900">{l.nama}</td>
+                                                        <td className="p-3.5 font-semibold text-primary">{l.jabatan}</td>
+                                                        <td className="p-3.5 font-mono">{l.no_hp}</td>
+                                                        <td className="p-3.5"><span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold">{l.pic_modul}</span></td>
+                                                        {user.role === 'SUPER_ADMIN' && (
+                                                            <td className="p-3.5 text-center">
+                                                                <button onClick={() => handleDeleteLeader(l.id)} className="px-3 py-1 bg-red-100 text-red-600 hover:bg-red-200 rounded-xl text-xs font-bold transition">Hapus</button>
+                                                            </td>
+                                                        )}
+                                                    </tr>
+                                                ))}
+                                                {leaders.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada data pengurus terdaftar.</td></tr>}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             )}
@@ -604,12 +686,53 @@
                         </div>
                     </main>
 
+                    {/* MODAL INPUT PENGURUS (ADMIN ONLY) */}
+                    {showModalLeader && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-100">
+                                <h3 className="text-lg font-black text-darker mb-1">Tambah Pengurus & PIC Baru</h3>
+                                <p className="text-xs text-slate-500 mb-4">Pengurus terdaftar dapat login menggunakan nomor WhatsApp.</p>
+                                <form onSubmit={handleSaveLeader} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nama Lengkap Pengurus</label>
+                                        <input type="text" required value={formLeader.nama} onChange={e => setFormLeader({...formLeader, nama: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Nama Lengkap" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Jabatan / Peran</label>
+                                        <select value={formLeader.jabatan} onChange={e => setFormLeader({...formLeader, jabatan: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
+                                            <option value="Pengurus Gang">Pengurus Gang</option>
+                                            <option value="Pengurus Tabungan Cor Jalan">Pengurus Tabungan Cor Jalan</option>
+                                            <option value="Pengurus Jimpitan">Pengurus Jimpitan</option>
+                                            <option value="Koordinator Ibu-Ibu">Koordinator Ibu-Ibu</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nomor WhatsApp (Untuk Login OTP)</label>
+                                        <input type="text" required value={formLeader.no_hp} onChange={e => setFormLeader({...formLeader, no_hp: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="08xxxxxxxxxx" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">PIC Modul Input Transaksi</label>
+                                        <select value={formLeader.pic_modul} onChange={e => setFormLeader({...formLeader, pic_modul: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
+                                            <option value="Kas">Kas Warga</option>
+                                            <option value="Tabungan Cor">Tabungan Cor Jalan</option>
+                                            <option value="Jimpitan">Jimpitan</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex justify-end space-x-3 pt-4">
+                                        <button type="button" onClick={() => setShowModalLeader(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
+                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Pengurus</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     {/* MODAL INPUT TRANSAKSI KEUANGAN */}
                     {showModalKeuangan && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-100">
                                 <h3 className="text-lg font-black text-darker mb-1">Catat Transaksi {formKeuangan.kategori_transaksi}</h3>
-                                <p className="text-xs text-slate-500 mb-4">Masukkan detail pemasukan atau pengeluaran baru.</p>
+                                <p className="text-xs text-slate-500 mb-4">Dicatat oleh PIC: <span className="font-bold text-primary">{user.nama}</span></p>
                                 <form onSubmit={handleSaveKeuangan} className="space-y-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
@@ -618,7 +741,7 @@
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-600 mb-1">Jenis Transaksi</label>
-                                            <select value={formKeuangan.jenis} onChange={e => setFormKeuangan({...formKeuangan, jenis: e.target.value})} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
+                                            <select value={formKeuangan.jenis} onChange={e => setFormKeuangan({...formKeuangan, jenis: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
                                                 <option value="masuk">Pemasukan (+)</option>
                                                 <option value="keluar">Pengeluaran (-)</option>
                                             </select>
