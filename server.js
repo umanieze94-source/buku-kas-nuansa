@@ -182,7 +182,7 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
 
 // REQUEST OTP (PENGURUS / WARGA)
 app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
-    const { no_hp, role_target } = req.body; // role_target: 'PENGURUS' atau 'WARGA'
+    const { no_hp, role_target } = req.body;
     
     if (role_target === 'PENGURUS') {
         const leader = await get('SELECT * FROM leaders WHERE no_hp = ?', [no_hp]);
@@ -199,18 +199,17 @@ app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // Berlaku 5 menit
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     await run('DELETE FROM otp_codes WHERE no_hp = ?', [no_hp]);
     await run('INSERT INTO otp_codes (no_hp, otp, expires_at) VALUES (?, ?, ?)', [no_hp, otp, expiresAt]);
 
-    // Simulasi pengiriman OTP WhatsApp (dicetak di console server railway/terminal)
     console.log(`[WHATSAPP OTP] Ke nomor ${no_hp}: Kode OTP Anda adalah ${otp}`);
 
     res.json({ 
         success: true, 
         message: 'Kode OTP berhasil dikirim ke WhatsApp Anda.',
-        dev_otp: otp // Ditampilkan untuk memudahkan pengujian langsung
+        dev_otp: otp
     });
 }));
 
@@ -242,7 +241,7 @@ app.post('/api/auth/verify-otp', asyncRoute(async (req, res) => {
     res.json({ success: true, user: userData });
 }));
 
-// DASHBOARD STATS & API LAINNYA
+// DASHBOARD STATS
 app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const membersCount = await get('SELECT COUNT(*) as cnt FROM members');
     const leadersCount = await get('SELECT COUNT(*) as cnt FROM leaders');
@@ -251,7 +250,7 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const kas = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Kas"');
     const cor = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Tabungan Cor"');
     const jimpitan = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Jimpitan"');
-    const sosial = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Dana Sosial"');
+    const totalKeluar = await get('SELECT SUM(keluar) as total FROM keuangan');
 
     res.json({
         success: true,
@@ -263,12 +262,28 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
             saldoKas: kas.saldo || 0,
             saldoCor: cor.saldo || 0,
             saldoJimpitan: jimpitan.saldo || 0,
-            saldoSosial: sosial.saldo || 0,
-            totalKekayaan: (kas.saldo || 0) + (cor.saldo || 0) + (jimpitan.saldo || 0) + (sosial.saldo || 0) + (assetsSum.total || 0)
+            totalPengeluaran: totalKeluar.total || 0
         }
     });
 }));
 
+// KEUANGAN (KAS WARGA, IURAN COR JALAN, JIMPITAN)
+app.get('/api/keuangan', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM keuangan ORDER BY tanggal DESC, id DESC');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/keuangan', asyncRoute(async (req, res) => {
+    const { kategori_transaksi, tanggal, uraian, masuk, keluar, input_oleh } = req.body;
+    await run(
+        'INSERT INTO keuangan (kategori_transaksi, tanggal, uraian, masuk, keluar, input_oleh) VALUES (?, ?, ?, ?, ?, ?)',
+        [kategori_transaksi, tanggal, uraian, Number(masuk) || 0, Number(keluar) || 0, input_oleh || 'Admin']
+    );
+    await logAudit(`TRANSAKSI ${kategori_transaksi.toUpperCase()}`, input_oleh || 'Admin', `${uraian} (Masuk: Rp ${masuk || 0}, Keluar: Rp ${keluar || 0})`);
+    res.json({ success: true, message: 'Transaksi berhasil dicatat.' });
+}));
+
+// WARGA, PENGURUS, ASET, AUDIT LOG, BACKUP
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
