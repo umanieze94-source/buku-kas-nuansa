@@ -114,6 +114,13 @@ async function initDatabase() {
             keterangan TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS otp_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            no_hp TEXT NOT NULL,
+            otp TEXT NOT NULL,
+            expires_at DATETIME NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS keuangan (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             kategori_transaksi TEXT NOT NULL,
@@ -133,14 +140,6 @@ async function initDatabase() {
             kondisi TEXT,
             lokasi TEXT,
             keterangan TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS announcements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            judul TEXT NOT NULL,
-            isi TEXT NOT NULL,
-            tanggal TEXT NOT NULL,
-            status TEXT DEFAULT 'Aktif'
         );
 
         CREATE TABLE IF NOT EXISTS audit_logs (
@@ -165,7 +164,7 @@ async function initDatabase() {
     }
 }
 
-// LOGIN ADMIN
+// 1. LOGIN ADMIN
 app.post('/api/login/admin', asyncRoute(async (req, res) => {
     const { email, password } = req.body;
     const user = await get('SELECT * FROM users WHERE email = ?', [email]);
@@ -174,14 +173,76 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
         return res.status(401).json({ success: false, message: 'Email atau password admin salah.' });
     }
 
-    await logAudit('LOGIN', user.nama, 'Super Admin masuk ke sistem');
+    await logAudit('LOGIN ADMIN', user.nama, 'Super Admin masuk ke sistem');
     res.json({
         success: true,
-        user: { id: user.id, email: user.email, nama: user.nama, role: user.role }
+        user: { id: user.id, email: user.email, nama: user.nama, role: 'SUPER_ADMIN' }
     });
 }));
 
-// DASHBOARD STATS
+// REQUEST OTP (PENGURUS / WARGA)
+app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
+    const { no_hp, role_target } = req.body; // role_target: 'PENGURUS' atau 'WARGA'
+    
+    if (role_target === 'PENGURUS') {
+        const leader = await get('SELECT * FROM leaders WHERE no_hp = ?', [no_hp]);
+        if (!leader) {
+            return res.status(404).json({ success: false, message: 'Nomor WhatsApp pengurus tidak terdaftar di sistem.' });
+        }
+    } else if (role_target === 'WARGA') {
+        const member = await get('SELECT * FROM members WHERE no_hp = ?', [no_hp]);
+        if (!member) {
+            return res.status(404).json({ success: false, message: 'Nomor WhatsApp warga tidak terdaftar di sistem.' });
+        }
+    } else {
+        return res.status(400).json({ success: false, message: 'Target role tidak valid.' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // Berlaku 5 menit
+
+    await run('DELETE FROM otp_codes WHERE no_hp = ?', [no_hp]);
+    await run('INSERT INTO otp_codes (no_hp, otp, expires_at) VALUES (?, ?, ?)', [no_hp, otp, expiresAt]);
+
+    // Simulasi pengiriman OTP WhatsApp (dicetak di console server railway/terminal)
+    console.log(`[WHATSAPP OTP] Ke nomor ${no_hp}: Kode OTP Anda adalah ${otp}`);
+
+    res.json({ 
+        success: true, 
+        message: 'Kode OTP berhasil dikirim ke WhatsApp Anda.',
+        dev_otp: otp // Ditampilkan untuk memudahkan pengujian langsung
+    });
+}));
+
+// VERIFY OTP & LOGIN (PENGURUS / WARGA)
+app.post('/api/auth/verify-otp', asyncRoute(async (req, res) => {
+    const { no_hp, otp, role_target } = req.body;
+
+    const record = await get('SELECT * FROM otp_codes WHERE no_hp = ? AND otp = ?', [no_hp, otp]);
+    if (!record) {
+        return res.status(400).json({ success: false, message: 'Kode OTP salah atau tidak valid.' });
+    }
+
+    if (new Date() > new Date(record.expires_at)) {
+        return res.status(400).json({ success: false, message: 'Kode OTP telah kadaluarsa.' });
+    }
+
+    await run('DELETE FROM otp_codes WHERE no_hp = ?', [no_hp]);
+
+    let userData = null;
+    if (role_target === 'PENGURUS') {
+        const leader = await get('SELECT * FROM leaders WHERE no_hp = ?', [no_hp]);
+        userData = { id: leader.id, nama: leader.nama, role: 'PENGURUS', jabatan: leader.jabatan };
+    } else {
+        const member = await get('SELECT * FROM members WHERE no_hp = ?', [no_hp]);
+        userData = { id: member.id, nama: member.nama, role: 'WARGA', alamat: member.alamat };
+    }
+
+    await logAudit(`LOGIN ${role_target}`, userData.nama, `${role_target} masuk menggunakan WhatsApp OTP`);
+    res.json({ success: true, user: userData });
+}));
+
+// DASHBOARD STATS & API LAINNYA
 app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const membersCount = await get('SELECT COUNT(*) as cnt FROM members');
     const leadersCount = await get('SELECT COUNT(*) as cnt FROM leaders');
@@ -192,30 +253,22 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     const jimpitan = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Jimpitan"');
     const sosial = await get('SELECT SUM(masuk - keluar) as saldo FROM keuangan WHERE kategori_transaksi = "Dana Sosial"');
 
-    const saldoKas = kas.saldo || 0;
-    const saldoCor = cor.saldo || 0;
-    const saldoJimpitan = jimpitan.saldo || 0;
-    const saldoSosial = sosial.saldo || 0;
-    const nilaiAset = assetsSum.total || 0;
-    const totalKekayaan = saldoKas + saldoCor + saldoJimpitan + saldoSosial + nilaiAset;
-
     res.json({
         success: true,
         stats: {
             members: membersCount.cnt,
             leaders: leadersCount.cnt,
             totalAset: assetsSum.cnt || 0,
-            nilaiAset,
-            saldoKas,
-            saldoCor,
-            saldoJimpitan,
-            saldoSosial,
-            totalKekayaan
+            nilaiAset: assetsSum.total || 0,
+            saldoKas: kas.saldo || 0,
+            saldoCor: cor.saldo || 0,
+            saldoJimpitan: jimpitan.saldo || 0,
+            saldoSosial: sosial.saldo || 0,
+            totalKekayaan: (kas.saldo || 0) + (cor.saldo || 0) + (jimpitan.saldo || 0) + (sosial.saldo || 0) + (assetsSum.total || 0)
         }
     });
 }));
 
-// WARGA
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -231,7 +284,6 @@ app.post('/api/members', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
 }));
 
-// PENGURUS & ASET & LAINNYA
 app.get('/api/leaders', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM leaders ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -255,18 +307,6 @@ app.post('/api/assets', asyncRoute(async (req, res) => {
         [nama_aset, kategori, tanggal_pembelian, nilai_pembelian || 0, kondisi, lokasi, keterangan]);
     await logAudit('TAMBAH ASET', actor || 'Admin', `Mencatat aset: ${nama_aset}`);
     res.json({ success: true, message: 'Aset berhasil dicatat.' });
-}));
-
-app.get('/api/announcements', asyncRoute(async (req, res) => {
-    const rows = await all('SELECT * FROM announcements ORDER BY id DESC');
-    res.json({ success: true, data: rows });
-}));
-
-app.post('/api/announcements', asyncRoute(async (req, res) => {
-    const { judul, isi, tanggal, status, actor } = req.body;
-    await run('INSERT INTO announcements (judul, isi, tanggal, status) VALUES (?, ?, ?, ?)', [judul, isi, tanggal, status || 'Aktif']);
-    await logAudit('BUAT PENGUMUMAN', actor || 'Admin', `Membuat pengumuman: ${judul}`);
-    res.json({ success: true, message: 'Pengumuman berhasil dipublikasikan.' });
 }));
 
 app.get('/api/audit-logs', asyncRoute(async (req, res) => {
