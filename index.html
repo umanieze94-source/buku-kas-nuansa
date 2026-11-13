@@ -36,43 +36,52 @@
             const [stats, setStats] = React.useState({});
             const [members, setMembers] = React.useState([]);
             const [leaders, setLeaders] = React.useState([]);
-            const [assets, setAssets] = React.useState([]);
             const [keuangan, setKeuangan] = React.useState([]);
+            const [assets, setAssets] = React.useState([]);
+            const [agendas, setAgendas] = React.useState([]);
             const [auditLogs, setAuditLogs] = React.useState([]);
             const [searchQuery, setSearchQuery] = React.useState('');
             const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
-            // Login State Selection
+            // Auth State
             const [loginMode, setLoginMode] = React.useState('admin');
             const [loginEmail, setLoginEmail] = React.useState('');
             const [loginPassword, setLoginPassword] = React.useState('');
-            
-            // OTP State
             const [phoneNum, setPhoneNum] = React.useState('');
             const [otpSent, setOtpSent] = React.useState(false);
             const [otpCode, setOtpCode] = React.useState('');
             const [devOtpInfo, setDevOtpInfo] = React.useState('');
-            
             const [loginError, setLoginError] = React.useState('');
             const [loginMessage, setLoginMessage] = React.useState('');
 
-            // Modal Input Warga
+            // Modals
             const [showModalWarga, setShowModalWarga] = React.useState(false);
-            const [formWarga, setFormWarga] = React.useState({ nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
+            const [formWarga, setFormWarga] = React.useState({ nik: '', nama: '', nomor_rumah: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
 
-            // Modal Input Pengurus (Admin Only)
             const [showModalLeader, setShowModalLeader] = React.useState(false);
-            const [formLeader, setFormLeader] = React.useState({ nama: '', jabatan: 'Pengurus Gang', no_hp: '', pic_modul: 'Kas Gang' });
+            const [formLeader, setFormLeader] = React.useState({ nama: '', jabatan: 'Pengurus Gang', alamat: '', no_hp: '', pic_modul: 'Kas Gang' });
 
-            // Modal Input Keuangan
-            const [showModalKeuangan, setShowModalKeuangan] = React.useState(false);
-            const [formKeuangan, setFormKeuangan] = React.useState({
-                kategori_transaksi: 'Kas',
+            const [showModalAgenda, setShowModalAgenda] = React.useState(false);
+            const [formAgenda, setFormAgenda] = React.useState({ judul: '', tanggal: new Date().toISOString().slice(0, 10), waktu: '19:00', lokasi: 'Pos Ronda RT 44', kategori: 'Rapat Warga', deskripsi: '' });
+
+            const [showModalPengeluaran, setShowModalPengeluaran] = React.useState(false);
+            const [formPengeluaran, setFormPengeluaran] = React.useState({ tanggal: new Date().toISOString().slice(0, 10), uraian: '', keluar: 0 });
+
+            // Kas Warga Form State
+            const [cariRumah, setCariRumah] = React.useState('');
+            const [selectedWargaKas, setSelectedWargaKas] = React.useState(null);
+            const [formKasItems, setFormKasItems] = React.useState({
                 tanggal: new Date().toISOString().slice(0, 10),
-                uraian: '',
-                jenis: 'masuk',
-                nominal: 0
+                bulan_tahun: new Date().toISOString().slice(0, 7),
+                iuran_bulanan: 0,
+                cor_jalan: 0,
+                dansos: 0,
+                lain_lain: 0,
+                keterangan_lain: ''
             });
+
+            // Jimpitan PIC Form
+            const [formJimpitan, setFormJimpitan] = React.useState({ tanggal: new Date().toISOString().slice(0, 10), nominal: 0, keterangan: 'Setoran Jimpitan Harian' });
 
             const [timeStr, setTimeStr] = React.useState('');
             const [dateStr, setDateStr] = React.useState('');
@@ -100,19 +109,23 @@
                     const dLead = await resLead.json();
                     if (dLead.success) setLeaders(dLead.data);
 
-                    const resAsset = await fetch('/api/assets');
-                    const dAsset = await resAsset.json();
-                    if (dAsset.success) setAssets(dAsset.data);
-
                     const resKeu = await fetch('/api/keuangan');
                     const dKeu = await resKeu.json();
                     if (dKeu.success) setKeuangan(dKeu.data);
 
-                    const resAudit = await fetch('/api/audit-logs');
-                    const dAudit = await resAudit.json();
-                    if (dAudit.success) setAuditLogs(dAudit.data);
+                    const resAsset = await fetch('/api/assets');
+                    const dAsset = await resAsset.json();
+                    if (dAsset.success) setAssets(dAsset.data);
+
+                    const resAg = await fetch('/api/agendas');
+                    const dAg = await resAg.json();
+                    if (dAg.success) setAgendas(dAg.data);
+
+                    const resAud = await fetch('/api/audit-logs');
+                    const dAud = await resAud.json();
+                    if (dAud.success) setAuditLogs(dAud.data);
                 } catch (e) {
-                    console.error('Gagal mengambil data:', e);
+                    console.error('Gagal fetch data:', e);
                 }
             };
 
@@ -134,20 +147,14 @@
                         body: JSON.stringify({ email: loginEmail, password: loginPassword })
                     });
                     const data = await res.json();
-                    if (data.success) {
-                        setUser(data.user);
-                    } else {
-                        setLoginError(data.message || 'Login gagal.');
-                    }
-                } catch (err) {
-                    setLoginError('Terjadi kesalahan koneksi.');
-                }
+                    if (data.success) setUser(data.user);
+                    else setLoginError(data.message);
+                } catch (err) { setLoginError('Koneksi Gagal'); }
             };
 
             const handleRequestOtp = async (e) => {
                 e.preventDefault();
                 setLoginError('');
-                setLoginMessage('');
                 try {
                     const roleTarget = loginMode === 'pengurus' ? 'PENGURUS' : 'WARGA';
                     const res = await fetch('/api/auth/request-otp', {
@@ -160,17 +167,12 @@
                         setOtpSent(true);
                         setLoginMessage(data.message);
                         if(data.dev_otp) setDevOtpInfo(data.dev_otp);
-                    } else {
-                        setLoginError(data.message);
-                    }
-                } catch (err) {
-                    setLoginError('Gagal mengirim permintaan OTP.');
-                }
+                    } else { setLoginError(data.message); }
+                } catch (err) { setLoginError('Gagal kirim OTP'); }
             };
 
             const handleVerifyOtp = async (e) => {
                 e.preventDefault();
-                setLoginError('');
                 try {
                     const roleTarget = loginMode === 'pengurus' ? 'PENGURUS' : 'WARGA';
                     const res = await fetch('/api/auth/verify-otp', {
@@ -179,99 +181,115 @@
                         body: JSON.stringify({ no_hp: phoneNum, otp: otpCode, role_target: roleTarget })
                     });
                     const data = await res.json();
-                    if (data.success) {
-                        setUser(data.user);
-                    } else {
-                        setLoginError(data.message);
-                    }
-                } catch (err) {
-                    setLoginError('Verifikasi OTP gagal.');
-                }
+                    if (data.success) setUser(data.user);
+                    else setLoginError(data.message);
+                } catch (err) { setLoginError('Verifikasi gagal'); }
             };
 
             const handleSaveWarga = async (e) => {
                 e.preventDefault();
-                try {
-                    const res = await fetch('/api/members', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...formWarga, actor: user.nama })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        setShowModalWarga(false);
-                        setFormWarga({ nik: '', nama: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
-                        fetchData();
-                    }
-                } catch (err) {
-                    alert('Gagal menyimpan data warga');
-                }
+                await fetch('/api/members', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...formWarga, actor: user.nama })
+                });
+                setShowModalWarga(false);
+                setFormWarga({ nik: '', nama: '', nomor_rumah: '', alamat: '', no_hp: '', kategori: 'Warga Tetap', status_iuran: 'Belum Bayar', tabungan_cor: 0, tunggakan: 0, keterangan: '' });
+                fetchData();
             };
 
             const handleSaveLeader = async (e) => {
                 e.preventDefault();
-                try {
-                    const res = await fetch('/api/leaders', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...formLeader, actor: user.nama })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        setShowModalLeader(false);
-                        setFormLeader({ nama: '', jabatan: 'Pengurus Gang', no_hp: '', pic_modul: 'Kas Gang' });
-                        fetchData();
-                    }
-                } catch (err) {
-                    alert('Gagal menyimpan pengurus');
-                }
-            };
-
-            const handleDeleteLeader = async (id) => {
-                if(!confirm('Hapus data pengurus ini?')) return;
-                try {
-                    await fetch(`/api/leaders/${id}`, { method: 'DELETE' });
-                    fetchData();
-                } catch (e) {
-                    alert('Gagal menghapus pengurus');
-                }
-            };
-
-            const openModalKeuangan = (kategori) => {
-                setFormKeuangan({
-                    kategori_transaksi: kategori,
-                    tanggal: new Date().toISOString().slice(0, 10),
-                    uraian: '',
-                    jenis: 'masuk',
-                    nominal: 0
+                await fetch('/api/leaders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...formLeader, actor: user.nama })
                 });
-                setShowModalKeuangan(true);
+                setShowModalLeader(false);
+                setFormLeader({ nama: '', jabatan: 'Pengurus Gang', alamat: '', no_hp: '', pic_modul: 'Kas Gang' });
+                fetchData();
             };
 
-            const handleSaveKeuangan = async (e) => {
+            const handleSaveAgenda = async (e) => {
                 e.preventDefault();
-                try {
-                    const payload = {
-                        kategori_transaksi: formKeuangan.kategori_transaksi,
-                        tanggal: formKeuangan.tanggal,
-                        uraian: formKeuangan.uraian,
-                        masuk: formKeuangan.jenis === 'masuk' ? Number(formKeuangan.nominal) : 0,
-                        keluar: formKeuangan.jenis === 'keluar' ? Number(formKeuangan.nominal) : 0,
-                        input_oleh: user.nama
-                    };
-                    const res = await fetch('/api/keuangan', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        setShowModalKeuangan(false);
-                        fetchData();
+                await fetch('/api/agendas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...formAgenda, actor: user.nama })
+                });
+                setShowModalAgenda(false);
+                setFormAgenda({ judul: '', tanggal: new Date().toISOString().slice(0, 10), waktu: '19:00', lokasi: 'Pos Ronda', kategori: 'Rapat', deskripsi: '' });
+                fetchData();
+            };
+
+            const handleSavePengeluaran = async (e) => {
+                e.preventDefault();
+                await fetch('/api/keuangan/keluar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...formPengeluaran, input_oleh: user.nama })
+                });
+                setShowModalPengeluaran(false);
+                setFormPengeluaran({ tanggal: new Date().toISOString().slice(0, 10), uraian: '', keluar: 0 });
+                fetchData();
+            };
+
+            const handleSimpanKasWarga = async (e) => {
+                e.preventDefault();
+                if (!selectedWargaKas) return alert('Pilih nomor rumah warga terlebih dahulu!');
+
+                const items = [
+                    { kat: 'Iuran Bulanan', val: Number(formKasItems.iuran_bulanan), uraian: `Iuran Bulanan ${formKasItems.bulan_tahun}` },
+                    { kat: 'Tabungan Cor', val: Number(formKasItems.cor_jalan), uraian: `Tabungan Cor Jalan ${formKasItems.bulan_tahun}` },
+                    { kat: 'Dansos', val: Number(formKasItems.dansos), uraian: `Dana Sosial ${formKasItems.bulan_tahun}` },
+                    { kat: 'Lain Lain', val: Number(formKasItems.lain_lain), uraian: formKasItems.keterangan_lain || 'Lain-lain' }
+                ];
+
+                for (let item of items) {
+                    if (item.val > 0) {
+                        await fetch('/api/keuangan', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                kategori_transaksi: item.kat,
+                                tanggal: formKasItems.tanggal,
+                                bulan_tahun: formKasItems.bulan_tahun,
+                                nomor_rumah: selectedWargaKas.nomor_rumah,
+                                nama_warga: selectedWargaKas.nama,
+                                uraian: item.uraian,
+                                masuk: item.val,
+                                keluar: 0,
+                                input_oleh: user.nama
+                            })
+                        });
                     }
-                } catch (err) {
-                    alert('Gagal menyimpan transaksi');
                 }
+                alert('Transaksi iuran warga berhasil disimpan dan masuk daftar bukti pembayaran!');
+                setFormKasItems({ ...formKasItems, iuran_bulanan: 0, cor_jalan: 0, dansos: 0, lain_lain: 0, keterangan_lain: '' });
+                setSelectedWargaKas(null);
+                setCariRumah('');
+                fetchData();
+            };
+
+            const handleKonfirmasiCor = async (id) => {
+                await fetch(`/api/keuangan/konfirmasi-cor/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ actor: user.nama })
+                });
+                fetchData();
+            };
+
+            const handleSimpanJimpitan = async (e) => {
+                e.preventDefault();
+                await fetch('/api/jimpitan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...formJimpitan, actor: user.nama })
+                });
+                alert('Jimpitan harian berhasil disimpan.');
+                setFormJimpitan({ tanggal: new Date().toISOString().slice(0, 10), nominal: 0, keterangan: 'Setoran Jimpitan Harian' });
+                fetchData();
             };
 
             if (!user) {
@@ -283,54 +301,44 @@
                                 <h1 className="text-xl font-black text-darker">NUANSA 16A C3/C8</h1>
                                 <p className="text-xs font-semibold text-primary mt-1">Sistem Administrasi Warga Digital</p>
                             </div>
-
                             <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-2xl text-xs font-bold text-center">
-                                <button type="button" onClick={() => { setLoginMode('admin'); setOtpSent(false); setLoginError(''); }} className={`py-2 rounded-xl transition ${loginMode === 'admin' ? 'bg-primary text-white shadow' : 'text-slate-600'}`}>Admin</button>
-                                <button type="button" onClick={() => { setLoginMode('pengurus'); setOtpSent(false); setLoginError(''); }} className={`py-2 rounded-xl transition ${loginMode === 'pengurus' ? 'bg-primary text-white shadow' : 'text-slate-600'}`}>Pengurus</button>
-                                <button type="button" onClick={() => { setLoginMode('warga'); setOtpSent(false); setLoginError(''); }} className={`py-2 rounded-xl transition ${loginMode === 'warga' ? 'bg-primary text-white shadow' : 'text-slate-600'}`}>Warga</button>
+                                <button type="button" onClick={() => { setLoginMode('admin'); setOtpSent(false); }} className={`py-2 rounded-xl transition ${loginMode === 'admin' ? 'bg-primary text-white' : 'text-slate-600'}`}>Admin</button>
+                                <button type="button" onClick={() => { setLoginMode('pengurus'); setOtpSent(false); }} className={`py-2 rounded-xl transition ${loginMode === 'pengurus' ? 'bg-primary text-white' : 'text-slate-600'}`}>Pengurus</button>
+                                <button type="button" onClick={() => { setLoginMode('warga'); setOtpSent(false); }} className={`py-2 rounded-xl transition ${loginMode === 'warga' ? 'bg-primary text-white' : 'text-slate-600'}`}>Warga</button>
                             </div>
+                            {loginError && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs border font-semibold">{loginError}</div>}
+                            {loginMessage && <div className="mb-4 p-3 bg-emerald-50 text-emerald-700 rounded-xl text-xs border font-semibold">{loginMessage}</div>}
+                            {devOtpInfo && <div className="mb-4 p-3 bg-amber-50 text-amber-800 rounded-xl text-xs border">💡 <b>Simulasi OTP:</b> <span className="font-mono font-bold">{devOtpInfo}</span></div>}
 
-                            {loginError && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs border border-red-200 font-semibold">{loginError}</div>}
-                            {loginMessage && <div className="mb-4 p-3 bg-emerald-50 text-emerald-700 rounded-xl text-xs border border-emerald-200 font-semibold">{loginMessage}</div>}
-                            
-                            {devOtpInfo && (
-                                <div className="mb-4 p-3 bg-amber-50 text-amber-800 rounded-xl text-xs border border-amber-200">
-                                    💡 <b>Simulasi OTP WhatsApp:</b> <span className="font-mono font-bold text-sm">{devOtpInfo}</span>
-                                </div>
-                            )}
-
-                            {loginMode === 'admin' && (
+                            {loginMode === 'admin' ? (
                                 <form onSubmit={handleAdminLogin} className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Email Super Admin</label>
-                                        <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-primary focus:outline-none text-sm bg-slate-50" placeholder="admin@nuansa16a.com" />
+                                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Email Admin</label>
+                                        <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-3 border rounded-2xl text-sm bg-slate-50" placeholder="admin@nuansa16a.com" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Password</label>
-                                        <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-primary focus:outline-none text-sm bg-slate-50" placeholder="••••••••••••" />
+                                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Password</label>
+                                        <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-3 border rounded-2xl text-sm bg-slate-50" placeholder="••••••••" />
                                     </div>
-                                    <button type="submit" className="w-full py-3.5 bg-primary hover:bg-darker text-white font-bold rounded-2xl shadow-lg transition duration-200 text-sm">Masuk sebagai Admin</button>
+                                    <button type="submit" className="w-full py-3.5 bg-primary text-white font-bold rounded-2xl shadow-lg text-sm">Masuk Admin</button>
                                 </form>
-                            )}
-
-                            {(loginMode === 'pengurus' || loginMode === 'warga') && (
+                            ) : (
                                 <div>
                                     {!otpSent ? (
                                         <form onSubmit={handleRequestOtp} className="space-y-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nomor WhatsApp Terdaftar</label>
-                                                <input type="text" required value={phoneNum} onChange={e => setPhoneNum(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-primary focus:outline-none text-sm bg-slate-50" placeholder="08xxxxxxxxxx" />
+                                                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Nomor WhatsApp</label>
+                                                <input type="text" required value={phoneNum} onChange={e => setPhoneNum(e.target.value)} className="w-full px-4 py-3 border rounded-2xl text-sm bg-slate-50" placeholder="08xxxxxxxxxx" />
                                             </div>
-                                            <button type="submit" className="w-full py-3.5 bg-primary hover:bg-darker text-white font-bold rounded-2xl shadow-lg transition duration-200 text-sm">Kirim Kode OTP WhatsApp</button>
+                                            <button type="submit" className="w-full py-3.5 bg-primary text-white font-bold rounded-2xl shadow-lg text-sm">Kirim Kode OTP</button>
                                         </form>
                                     ) : (
                                         <form onSubmit={handleVerifyOtp} className="space-y-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Masukkan Kode OTP</label>
-                                                <input type="text" required value={otpCode} onChange={e => setOtpCode(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-primary focus:outline-none text-sm bg-slate-50 text-center font-mono tracking-widest text-lg" placeholder="123456" />
+                                                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Masukkan Kode OTP</label>
+                                                <input type="text" required value={otpCode} onChange={e => setOtpCode(e.target.value)} className="w-full px-4 py-3 border rounded-2xl text-center font-mono text-lg bg-slate-50" placeholder="123456" />
                                             </div>
-                                            <button type="submit" className="w-full py-3.5 bg-success hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-lg transition duration-200 text-sm">Verifikasi & Masuk</button>
-                                            <button type="button" onClick={() => setOtpSent(false)} className="w-full text-xs text-slate-500 font-bold hover:underline pt-2">Kirim ulang nomor lain</button>
+                                            <button type="submit" className="w-full py-3.5 bg-success text-white font-bold rounded-2xl shadow-lg text-sm">Verifikasi & Masuk</button>
                                         </form>
                                     )}
                                 </div>
@@ -341,478 +349,535 @@
             }
 
             const canEdit = user.role === 'SUPER_ADMIN' || user.role === 'PENGURUS';
-            const filteredMembers = members.filter(m => 
-                m.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                (m.alamat && m.alamat.toLowerCase().includes(searchQuery.toLowerCase()))
-            );
-
-            const renderKeuanganTab = (kategoriKode, judul, subjudul, saldoSaatIni) => {
-                const listTrx = keuangan.filter(k => k.kategori_transaksi === kategoriKode && 
-                    (k.uraian && k.uraian.toLowerCase().includes(searchQuery.toLowerCase()) || searchQuery === '')
-                );
-                return (
-                    <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                            <div>
-                                <h3 className="text-lg font-black text-darker">{judul}</h3>
-                                <p className="text-xs text-slate-500">{subjudul}</p>
-                            </div>
-                            <div className="flex items-center space-x-3">
-                                <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                                    <span className="text-xs text-slate-500 block">Saldo Terkumpul:</span>
-                                    <span className="text-base font-black text-primary">Rp {(saldoSaatIni || 0).toLocaleString()}</span>
-                                </div>
-                                {canEdit && (
-                                    <button onClick={() => openModalKeuangan(kategoriKode)} className="px-5 py-3 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
-                                        <i className="fa-solid fa-plus"></i><span>Catat Transaksi (PIC)</span>
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-slate-600">
-                                <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
-                                    <tr>
-                                        <th className="p-3.5 rounded-l-xl">Tanggal</th>
-                                        <th className="p-3.5">Uraian / Keterangan</th>
-                                        <th className="p-3.5">Pemasukan</th>
-                                        <th className="p-3.5">Pengeluaran</th>
-                                        <th className="p-3.5 rounded-r-xl">PIC (Dicatat Oleh)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {listTrx.map(t => (
-                                        <tr key={t.id} className="border-b border-slate-100 hover:bg-emerald-50/30 transition">
-                                            <td className="p-3.5 font-semibold text-slate-700">{t.tanggal}</td>
-                                            <td className="p-3.5">{t.uraian}</td>
-                                            <td className="p-3.5 font-bold text-emerald-600">{t.masuk > 0 ? `+ Rp ${t.masuk.toLocaleString()}` : '-'}</td>
-                                            <td className="p-3.5 font-bold text-red-600">{t.keluar > 0 ? `- Rp ${t.keluar.toLocaleString()}` : '-'}</td>
-                                            <td className="p-3.5 text-xs text-slate-500 font-medium">{t.input_oleh}</td>
-                                        </tr>
-                                    ))}
-                                    {listTrx.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                );
-            };
+            const isPicCor = user.role === 'SUPER_ADMIN' || (user.role === 'PENGURUS' && user.pic_modul === 'Cor Jalan');
+            const isPicJimpitan = user.role === 'SUPER_ADMIN' || (user.role === 'PENGURUS' && user.pic_modul === 'Jimpitan');
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row bg-bgapp">
-                    {/* Mobile Header */}
-                    <div className="md:hidden bg-darker text-white px-4 py-3 flex justify-between items-center shadow-md">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-primary text-white font-bold rounded-lg flex items-center justify-center text-xs">16A</div>
-                            <span className="font-bold text-sm">NUANSA 16A C3/C8</span>
-                        </div>
-                        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-white text-xl focus:outline-none">
-                            <i className={`fa-solid ${mobileMenuOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
-                        </button>
+                    {/* Mobile Navbar */}
+                    <div className="md:hidden bg-darker text-white px-4 py-3 flex justify-between items-center shadow">
+                        <span className="font-bold text-sm">NUANSA 16A C3/C8</span>
+                        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-white text-xl"><i className="fa-solid fa-bars"></i></button>
                     </div>
 
-                    {/* Sidebar / Drawer */}
-                    <aside className={`w-full md:w-72 bg-darker text-slate-200 flex flex-col justify-between shadow-2xl z-25 transition-all duration-300 ${mobileMenuOpen ? 'block' : 'hidden md:flex'}`}>
+                    {/* Sidebar */}
+                    <aside className={`w-full md:w-72 bg-darker text-slate-200 flex flex-col justify-between shadow-2xl z-20 ${mobileMenuOpen ? 'block' : 'hidden md:flex'}`}>
                         <div>
-                            <div className="p-6 border-b border-emerald-900 flex items-center space-x-3.5 bg-emerald-950/40">
-                                <div className="w-12 h-12 bg-primary text-white font-black rounded-xl flex items-center justify-center shadow-md border border-emerald-600 text-lg">16A</div>
+                            <div className="p-6 border-b border-emerald-900 flex items-center space-x-3 bg-emerald-950/40">
+                                <div className="w-12 h-12 bg-primary text-white font-black rounded-xl flex items-center justify-center text-lg">16A</div>
                                 <div>
-                                    <h2 className="font-black text-white text-base tracking-wide">NUANSA 16A</h2>
+                                    <h2 className="font-black text-white text-base">NUANSA 16A</h2>
                                     <p className="text-xs text-success font-bold">Blok C3 / C8 Karawang</p>
                                 </div>
                             </div>
-                            <nav className="p-4 space-y-1.5 text-sm font-medium">
-                                <button onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'dashboard' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-chart-pie w-5 text-success"></i><span>Dashboard Eksekutif</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('pengurus'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'pengurus' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-user-tie w-5 text-success"></i><span>Data Pengurus & PIC</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('kas'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'kas' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-wallet w-5 text-success"></i><span>Kas Warga</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('cor'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'cor' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-road w-5 text-success"></i><span>Iuran Cor Jalan</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('jimpitan'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'jimpitan' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-coins w-5 text-success"></i><span>Jimpitan</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('warga'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'warga' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-users w-5 text-success"></i><span>Data Warga</span>
-                                </button>
-                                <button onClick={() => { setActiveTab('aset'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'aset' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                    <i className="fa-solid fa-boxes-stacked w-5 text-success"></i><span>Data Aset</span>
-                                </button>
-                                {user.role === 'SUPER_ADMIN' && (
-                                    <>
-                                        <button onClick={() => { setActiveTab('audit'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'audit' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                            <i className="fa-solid fa-shield-halved w-5 text-success"></i><span>Audit Log</span>
-                                        </button>
-                                        <button onClick={() => { setActiveTab('backup'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'backup' ? 'bg-primary text-white shadow-lg font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}>
-                                            <i className="fa-solid fa-database w-5 text-success"></i><span>Backup Database</span>
-                                        </button>
-                                    </>
-                                )}
+                            <nav className="p-4 space-y-1 text-sm font-medium">
+                                <button onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'dashboard' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-chart-pie w-5 text-success"></i><span>Dashboard</span></button>
+                                <button onClick={() => { setActiveTab('pengurus'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'pengurus' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-user-tie w-5 text-success"></i><span>Data Pengurus</span></button>
+                                <button onClick={() => { setActiveTab('kas'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'kas' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-wallet w-5 text-success"></i><span>Kas Warga</span></button>
+                                <button onClick={() => { setActiveTab('cor'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'cor' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-road w-5 text-success"></i><span>Iuran Cor Jalan</span></button>
+                                <button onClick={() => { setActiveTab('jimpitan'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'jimpitan' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-coins w-5 text-success"></i><span>Jimpitan</span></button>
+                                <button onClick={() => { setActiveTab('warga'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'warga' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-users w-5 text-success"></i><span>Data Warga</span></button>
+                                <button onClick={() => { setActiveTab('aset'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'aset' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-boxes-stacked w-5 text-success"></i><span>Data Aset</span></button>
+                                {user.role === 'SUPER_ADMIN' && <button onClick={() => { setActiveTab('audit'); setMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition ${activeTab === 'audit' ? 'bg-primary text-white font-bold' : 'hover:bg-emerald-900/50 text-slate-300'}`}><i className="fa-solid fa-shield-halved w-5 text-success"></i><span>Audit Log</span></button>}
                             </nav>
                         </div>
                         <div className="p-4 border-t border-emerald-900 bg-emerald-950/20">
-                            <div className="mb-3 px-3">
-                                <p className="text-xs text-emerald-400 font-semibold">Login sebagai ({user.role}):</p>
-                                <p className="text-sm font-bold text-white truncate">{user.nama}</p>
-                            </div>
-                            <button onClick={() => setUser(null)} className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow transition">Keluar Sistem</button>
+                            <p className="text-xs text-emerald-400">Login ({user.role}):</p>
+                            <p className="text-sm font-bold text-white truncate">{user.nama}</p>
+                            <button onClick={() => setUser(null)} className="w-full mt-2 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold">Keluar</button>
                         </div>
                     </aside>
 
-                    {/* Main Content Area */}
-                    <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative bg-gradient-to-br from-emerald-50/50 via-white to-emerald-50/30">
-                        <header className="bg-white/90 backdrop-blur-md border-b border-emerald-100 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-10 shadow-sm">
-                            <div className="flex items-center space-x-4 w-full sm:w-auto">
-                                <div className="relative w-full sm:w-80">
-                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i className="fa-solid fa-magnifying-glass"></i></span>
-                                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari data..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary shadow-inner" />
-                                </div>
+                    {/* Main Content */}
+                    <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+                        <header className="bg-white/90 border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+                            <div className="relative w-80">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i className="fa-solid fa-magnifying-glass"></i></span>
+                                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari data..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-2xl text-sm focus:outline-none" />
                             </div>
-                            <div className="flex items-center space-x-4 text-xs sm:text-sm text-slate-600 font-semibold">
-                                <div className="bg-emerald-50 text-darker px-3.5 py-2 rounded-2xl border border-emerald-200 flex items-center space-x-2 shadow-sm">
-                                    <i className="fa-regular fa-calendar text-primary"></i><span>{dateStr}</span> | <i className="fa-regular fa-clock text-primary"></i><span>{timeStr}</span>
-                                </div>
-                            </div>
+                            <div className="text-xs font-semibold text-slate-600">{dateStr} | {timeStr}</div>
                         </header>
 
-                        <div className="p-4 sm:p-8 z-10 flex-1">
+                        <div className="p-4 sm:p-8 flex-1">
+                            {/* DASHBOARD */}
                             {activeTab === 'dashboard' && (
                                 <div className="space-y-6">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-                                        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pengeluaran</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-red-600 mt-2">Rp {(stats.totalPengeluaran || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-slate-500 mt-1">Total pengeluaran kas</p>
+                                    <div className="bg-gradient-to-r from-emerald-800 to-primary text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                        <div>
+                                            <span className="bg-emerald-700 text-xs font-bold px-3 py-1 rounded-full">RT 44 / RW 13</span>
+                                            <h2 className="text-2xl font-black mt-2">Dashboard Eksekutif</h2>
+                                            <p className="text-emerald-100 text-xs mt-1">Sistem Administrasi Warga Digital Nuansa 16A C3/C8</p>
                                         </div>
-                                        <div onClick={() => setActiveTab('kas')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo Total Kas</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoKas || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-success mt-1 font-bold">Klik untuk detail Kas →</p>
+                                        <div className="flex gap-2">
+                                            {canEdit && (
+                                                <>
+                                                    <button onClick={() => setShowModalPengeluaran(true)} className="px-4 py-2.5 bg-red-600 text-white font-bold rounded-2xl text-xs shadow hover:bg-red-700">
+                                                        <i className="fa-solid fa-minus-circle mr-2"></i>Catat Pengeluaran
+                                                    </button>
+                                                    <button onClick={() => setShowModalAgenda(true)} className="px-4 py-2.5 bg-white text-darker font-bold rounded-2xl text-xs shadow hover:bg-emerald-50">
+                                                        <i className="fa-solid fa-calendar-plus mr-2 text-primary"></i>Tambah Agenda
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
-                                        <div onClick={() => setActiveTab('cor')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Saldo Cor Jalan</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoCor || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-primary mt-1 font-bold">Klik untuk detail Cor →</p>
+                                    </div>
+
+                                    {/* Stats Grid */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div className="bg-white p-5 rounded-3xl shadow-sm border flex items-center space-x-4">
+                                            <div className="w-14 h-14 bg-emerald-100 text-primary rounded-2xl flex items-center justify-center text-xl font-bold"><i className="fa-solid fa-wallet"></i></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-400 uppercase">Total Saldo Kas</p>
+                                                <h3 className="text-lg font-black text-primary">Rp {(stats.saldoKas || 0).toLocaleString()}</h3>
+                                                <span className="text-[10px] text-slate-500">Otomatis potong pengeluaran</span>
+                                            </div>
                                         </div>
-                                        <div onClick={() => setActiveTab('jimpitan')} className="cursor-pointer bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo Jimpitan</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-darker mt-2">Rp {(stats.saldoJimpitan || 0).toLocaleString()}</h3>
-                                            <p className="text-xs text-primary mt-1 font-bold">Klik untuk Jimpitan →</p>
+                                        <div className="bg-white p-5 rounded-3xl shadow-sm border flex items-center space-x-4">
+                                            <div className="w-14 h-14 bg-amber-100 text-warning rounded-2xl flex items-center justify-center text-xl font-bold"><i className="fa-solid fa-road"></i></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-400 uppercase">Total Saldo Cor Jalan</p>
+                                                <h3 className="text-lg font-black text-warning">Rp {(stats.saldoCor || 0).toLocaleString()}</h3>
+                                            </div>
                                         </div>
-                                        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-md transition">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Agenda Kegiatan Gang</p>
-                                            <h3 className="text-xl sm:text-2xl font-black text-primary mt-2">Aktif</h3>
-                                            <p className="text-xs text-slate-500 mt-1">RT 44 / RW 13 C3/C8</p>
+                                        <div className="bg-white p-5 rounded-3xl shadow-sm border flex items-center space-x-4">
+                                            <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl font-bold"><i className="fa-solid fa-coins"></i></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-400 uppercase">Saldo Jimpitan</p>
+                                                <h3 className="text-lg font-black text-blue-600">Rp {(stats.saldoJimpitan || 0).toLocaleString()}</h3>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-5 rounded-3xl shadow-sm border flex items-center space-x-4">
+                                            <div className="w-14 h-14 bg-red-100 text-danger rounded-2xl flex items-center justify-center text-xl font-bold"><i className="fa-solid fa-file-invoice-dollar"></i></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-400 uppercase">Total Pengeluaran</p>
+                                                <h3 className="text-lg font-black text-danger">Rp {(stats.totalPengeluaran || 0).toLocaleString()}</h3>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Agenda Kegiatan Gang */}
+                                    <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                        <h3 className="text-base font-black text-darker mb-4 flex items-center">
+                                            <i className="fa-solid fa-calendar-days mr-2 text-primary"></i>Agenda & Planning Kegiatan Warga
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            {agendas.map(ag => (
+                                                <div key={ag.id} className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
+                                                    <span className="text-[10px] bg-primary text-white font-bold px-2 py-0.5 rounded">{ag.kategori}</span>
+                                                    <h4 className="font-bold text-darker mt-2 text-sm">{ag.judul}</h4>
+                                                    <p className="text-xs text-slate-500 mt-1"><i className="fa-regular fa-calendar mr-1"></i>{ag.tanggal} | {ag.waktu}</p>
+                                                    <p className="text-xs text-slate-600 mt-2">{ag.deskripsi}</p>
+                                                </div>
+                                            ))}
+                                            {agendas.length === 0 && <p className="text-xs text-slate-400">Belum ada agenda kegiatan direncanakan.</p>}
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* MENU DATA PENGURUS */}
+                            {/* DATA PENGURUS */}
                             {activeTab === 'pengurus' && (
-                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                                <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                    <div className="flex justify-between items-center mb-6">
                                         <div>
-                                            <h3 className="text-lg font-black text-darker">Data Pengurus & PIC Modul Keuangan</h3>
-                                            <p className="text-xs text-slate-500">Daftar pengurus resmi lingkungan RT 44 / RW 13 Blok C3/C8.</p>
+                                            <h3 className="text-lg font-black text-darker">Data Pengurus & PIC Modul</h3>
+                                            <p className="text-xs text-slate-500">Daftar pengurus RT 44 / RW 13</p>
                                         </div>
                                         {user.role === 'SUPER_ADMIN' && (
-                                            <button onClick={() => setShowModalLeader(true)} className="px-5 py-2.5 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
-                                                <i className="fa-solid fa-user-plus"></i><span>Tambah Pengurus Baru</span>
+                                            <button onClick={() => setShowModalLeader(true)} className="px-4 py-2.5 bg-primary text-white font-bold rounded-2xl text-xs">
+                                                <i className="fa-solid fa-user-plus mr-2"></i>Tambah Pengurus
                                             </button>
                                         )}
                                     </div>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-emerald-50 text-darker font-bold text-xs uppercase">
+                                            <tr>
+                                                <th className="p-3">Nama</th>
+                                                <th className="p-3">Jabatan</th>
+                                                <th className="p-3">Alamat Rumah</th>
+                                                <th className="p-3">No. WhatsApp</th>
+                                                <th className="p-3">PIC Modul</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {leaders.map(l => (
+                                                <tr key={l.id} className="border-b">
+                                                    <td className="p-3 font-bold text-darker">{l.nama}</td>
+                                                    <td className="p-3">{l.jabatan}</td>
+                                                    <td className="p-3 text-xs">{l.alamat || '-'}</td>
+                                                    <td className="p-3 font-mono">{l.no_hp}</td>
+                                                    <td className="p-3"><span className="bg-emerald-100 text-primary px-2 py-1 rounded text-xs font-bold">{l.pic_modul}</span></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm text-slate-600">
-                                            <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
+                            {/* KAS WARGA */}
+                            {activeTab === 'kas' && (
+                                <div className="bg-white rounded-3xl shadow-sm border p-6 space-y-6">
+                                    <div>
+                                        <h3 className="text-lg font-black text-darker">Pencatatan Kas Warga</h3>
+                                        <p className="text-xs text-slate-500">Cari nomor rumah warga untuk mencatat iuran bulanan, cor, dansos, dan lainnya.</p>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <input type="text" value={cariRumah} onChange={e => setCariRumah(e.target.value)} placeholder="Masukkan Nomor Rumah (Contoh: C3-01)" className="px-4 py-2 border rounded-2xl text-sm flex-1 bg-slate-50" />
+                                        <button onClick={() => {
+                                            const found = members.find(m => m.nomor_rumah.toLowerCase() === cariRumah.toLowerCase());
+                                            if (found) setSelectedWargaKas(found);
+                                            else alert('Warga dengan nomor rumah tersebut tidak ditemukan.');
+                                        }} className="px-5 py-2 bg-primary text-white font-bold rounded-2xl text-xs">Cari Warga</button>
+                                    </div>
+
+                                    {selectedWargaKas && (
+                                        <form onSubmit={handleSimpanKasWarga} className="p-5 bg-emerald-50/50 border border-emerald-200 rounded-2xl space-y-4">
+                                            <div className="flex justify-between items-center border-b pb-3">
+                                                <div>
+                                                    <h4 className="font-bold text-darker">Warga: {selectedWargaKas.nama}</h4>
+                                                    <p className="text-xs text-slate-500">No. Rumah: <span className="font-bold text-primary">{selectedWargaKas.nomor_rumah}</span> | Alamat: {selectedWargaKas.alamat}</p>
+                                                </div>
+                                                <button type="button" onClick={() => setSelectedWargaKas(null)} className="text-xs text-red-600 font-bold">Ganti Warga</button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold mb-1">Tanggal Bayar</label>
+                                                    <input type="date" required value={formKasItems.tanggal} onChange={e => setFormKasItems({...formKasItems, tanggal: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold mb-1">Periode Bulan</label>
+                                                    <input type="month" required value={formKasItems.bulan_tahun} onChange={e => setFormKasItems({...formKasItems, bulan_tahun: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-primary mb-1">Iuran Bulanan (Rp)</label>
+                                                    <input type="number" value={formKasItems.iuran_bulanan} onChange={e => setFormKasItems({...formKasItems, iuran_bulanan: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warning mb-1">Cor Jalan (Rp)</label>
+                                                    <input type="number" value={formKasItems.cor_jalan} onChange={e => setFormKasItems({...formKasItems, cor_jalan: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-blue-600 mb-1">Dansos (Rp)</label>
+                                                    <input type="number" value={formKasItems.dansos} onChange={e => setFormKasItems({...formKasItems, dansos: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 mb-1">Lain-Lain (Rp)</label>
+                                                    <input type="number" value={formKasItems.lain_lain} onChange={e => setFormKasItems({...formKasItems, lain_lain: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold mb-1">Keterangan Lain-Lain</label>
+                                                <input type="text" value={formKasItems.keterangan_lain} onChange={e => setFormKasItems({...formKasItems, keterangan_lain: e.target.value})} placeholder="Catatan khusus transaksi..." className="w-full p-2.5 border rounded-xl text-sm" />
+                                            </div>
+
+                                            <button type="submit" className="w-full py-3 bg-primary text-white font-bold rounded-xl shadow">Simpan & Masuk Daftar Bukti Pembayaran</button>
+                                        </form>
+                                    )}
+
+                                    <div>
+                                        <h4 className="font-bold text-darker mb-3">Daftar Bukti Pembayaran Warga</h4>
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-emerald-50 text-darker text-xs uppercase">
                                                 <tr>
-                                                    <th className="p-3.5 rounded-l-xl">Nama Pengurus</th>
-                                                    <th className="p-3.5">Jabatan / Peran</th>
-                                                    <th className="p-3.5">No WhatsApp (Login OTP)</th>
-                                                    <th className="p-3.5">PIC Modul Input</th>
-                                                    {user.role === 'SUPER_ADMIN' && <th className="p-3.5 rounded-r-xl text-center">Aksi</th>}
+                                                    <th className="p-3">Tanggal</th>
+                                                    <th className="p-3">No. Rumah</th>
+                                                    <th className="p-3">Nama Warga</th>
+                                                    <th className="p-3">Jenis Iuran</th>
+                                                    <th className="p-3">Nominal</th>
+                                                    <th className="p-3">Dicatat Oleh</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {leaders.map(l => (
-                                                    <tr key={l.id} className="border-b border-slate-100 hover:bg-emerald-50/30 transition">
-                                                        <td className="p-3.5 font-bold text-slate-900">{l.nama}</td>
-                                                        <td className="p-3.5 font-semibold text-primary">{l.jabatan}</td>
-                                                        <td className="p-3.5 font-mono">{l.no_hp}</td>
-                                                        <td className="p-3.5"><span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold">{l.pic_modul}</span></td>
-                                                        {user.role === 'SUPER_ADMIN' && (
-                                                            <td className="p-3.5 text-center">
-                                                                <button onClick={() => handleDeleteLeader(l.id)} className="px-3 py-1 bg-red-100 text-red-600 hover:bg-red-200 rounded-xl text-xs font-bold transition">Hapus</button>
-                                                            </td>
+                                                {keuangan.filter(k => k.nomor_rumah).map(k => (
+                                                    <tr key={k.id} className="border-b">
+                                                        <td className="p-3">{k.tanggal}</td>
+                                                        <td className="p-3 font-bold text-primary">{k.nomor_rumah}</td>
+                                                        <td className="p-3">{k.nama_warga}</td>
+                                                        <td className="p-3 font-semibold">{k.kategori_transaksi}</td>
+                                                        <td className="p-3 font-bold text-emerald-600">Rp {k.masuk.toLocaleString()}</td>
+                                                        <td className="p-3 text-xs text-slate-500">{k.input_oleh}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* IURAN COR JALAN */}
+                            {activeTab === 'cor' && (
+                                <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                    <h3 className="text-lg font-black text-darker mb-2">Rekapitulasi Iuran Cor Jalan</h3>
+                                    <p className="text-xs text-slate-500 mb-6">Data otomatis muncul dari menu Kas Warga. Konfirmasi tombol biru jika dana telah diterima PIC.</p>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-amber-50 text-darker text-xs uppercase">
+                                            <tr>
+                                                <th className="p-3">No. Rumah</th>
+                                                <th className="p-3">Nama Warga</th>
+                                                <th className="p-3">Periode</th>
+                                                <th className="p-3">Nominal Cor</th>
+                                                <th className="p-3 text-center">Status Diterima PIC</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {keuangan.filter(k => k.kategori_transaksi === 'Tabungan Cor').map(c => (
+                                                <tr key={c.id} className="border-b">
+                                                    <td className="p-3 font-bold text-primary">{c.nomor_rumah}</td>
+                                                    <td className="p-3">{c.nama_warga}</td>
+                                                    <td className="p-3">{c.bulan_tahun}</td>
+                                                    <td className="p-3 font-bold text-warning">Rp {c.masuk.toLocaleString()}</td>
+                                                    <td className="p-3 text-center">
+                                                        {c.status_diterima === 'Sudah' ? (
+                                                            <span className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full shadow">Diterima (Aktif)</span>
+                                                        ) : (
+                                                            isPicCor ? (
+                                                                <button onClick={() => handleKonfirmasiCor(c.id)} className="px-3 py-1 bg-slate-200 hover:bg-blue-500 hover:text-white text-slate-700 text-xs font-bold rounded-full transition">
+                                                                    Konfirmasi Terima (Klik)
+                                                                </button>
+                                                            ) : (
+                                                                <span className="px-3 py-1 bg-slate-100 text-slate-400 text-xs font-bold rounded-full">Belum Diterima</span>
+                                                            )
                                                         )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* JIMPITAN */}
+                            {activeTab === 'jimpitan' && (
+                                <div className="bg-white rounded-3xl shadow-sm border p-6 space-y-6">
+                                    <div>
+                                        <h3 className="text-lg font-black text-darker">Modul Tabungan Jimpitan Harian</h3>
+                                        <p className="text-xs text-slate-500">Hanya PIC Jimpitan terdaftar dan Admin yang memiliki akses input data di menu ini.</p>
+                                    </div>
+
+                                    {isPicJimpitan ? (
+                                        <form onSubmit={handleSimpanJimpitan} className="p-5 bg-blue-50/50 border border-blue-200 rounded-2xl space-y-4 max-w-lg">
+                                            <div>
+                                                <label className="block text-xs font-bold mb-1">Tanggal Update</label>
+                                                <input type="date" required value={formJimpitan.tanggal} onChange={e => setFormJimpitan({...formJimpitan, tanggal: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold mb-1">Nominal Uang Masuk (Rp)</label>
+                                                <input type="number" required value={formJimpitan.nominal} onChange={e => setFormJimpitan({...formJimpitan, nominal: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold mb-1">Keterangan / Sesi</label>
+                                                <input type="text" value={formJimpitan.keterangan} onChange={e => setFormJimpitan({...formJimpitan, keterangan: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                                            </div>
+                                            <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow">Simpan Setoran Jimpitan</button>
+                                        </form>
+                                    ) : (
+                                        <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-xs font-semibold">Anda bukan PIC Jimpitan. Menu ini hanya dapat diakses oleh PIC Jimpitan dan Super Admin.</div>
+                                    )}
+
+                                    <div>
+                                        <h4 className="font-bold text-darker mb-3">Riwayat Setoran Jimpitan</h4>
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-blue-50 text-darker text-xs uppercase">
+                                                <tr>
+                                                    <th className="p-3">Tanggal</th>
+                                                    <th className="p-3">Keterangan</th>
+                                                    <th className="p-3">Nominal</th>
+                                                    <th className="p-3">PIC Input</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {keuangan.filter(k => k.kategori_transaksi === 'Jimpitan').map(j => (
+                                                    <tr key={j.id} className="border-b">
+                                                        <td className="p-3">{j.tanggal}</td>
+                                                        <td className="p-3">{j.uraian}</td>
+                                                        <td className="p-3 font-bold text-blue-600">Rp {j.masuk.toLocaleString()}</td>
+                                                        <td className="p-3 text-xs text-slate-500">{j.input_oleh}</td>
                                                     </tr>
                                                 ))}
-                                                {leaders.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada data pengurus terdaftar.</td></tr>}
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
                             )}
 
-                            {activeTab === 'kas' && renderKeuanganTab('Kas', 'Kas Warga NUANSA 16A', 'Pencatatan pemasukan iuran rutin bulanan & pengeluaran operasional warga.', stats.saldoKas)}
-                            {activeTab === 'cor' && renderKeuanganTab('Tabungan Cor', 'Iuran & Tabungan Cor Jalan', 'Dana khusus perbaikan dan pengecoran jalan lingkungan Blok C3 / C8.', stats.saldoCor)}
-                            {activeTab === 'jimpitan' && renderKeuanganTab('Jimpitan', 'Dana Jimpitan Warga', 'Rekapitulasi pengumpulan dan pemanfaatan dana jimpitan harian/mingguan warga.', stats.saldoJimpitan)}
-
+                            {/* DATA WARGA */}
                             {activeTab === 'warga' && (
-                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                                <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                    <div className="flex justify-between items-center mb-6">
                                         <div>
-                                            <h3 className="text-lg font-black text-darker">Data Warga & Status Iuran</h3>
-                                            <p className="text-xs text-slate-500">Daftar lengkap status iuran, tabungan cor, dan tunggakan warga.</p>
+                                            <h3 className="text-lg font-black text-darker">Data Warga & Rekap Bulanan</h3>
+                                            <p className="text-xs text-slate-500">Hanya Super Admin yang dapat menambah atau mengubah data di menu ini.</p>
                                         </div>
                                         {user.role === 'SUPER_ADMIN' && (
-                                            <button onClick={() => setShowModalWarga(true)} className="px-5 py-2.5 bg-primary hover:bg-darker text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center space-x-2">
-                                                <i className="fa-solid fa-plus"></i><span>Input Warga Baru</span>
+                                            <button onClick={() => setShowModalWarga(true)} className="px-4 py-2.5 bg-primary text-white font-bold rounded-2xl text-xs">
+                                                <i className="fa-solid fa-user-plus mr-2"></i>Tambah Warga Baru
                                             </button>
                                         )}
                                     </div>
-
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm text-slate-600">
-                                            <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
-                                                <tr>
-                                                    <th className="p-3.5 rounded-l-xl">Nama Warga</th>
-                                                    <th className="p-3.5">Alamat</th>
-                                                    <th className="p-3.5">No HP</th>
-                                                    <th className="p-3.5">Status Iuran</th>
-                                                    <th className="p-3.5">Tabungan Cor</th>
-                                                    <th className="p-3.5">Tunggakan</th>
-                                                    <th className="p-3.5 rounded-r-xl">Keterangan</th>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-emerald-50 text-darker text-xs uppercase">
+                                            <tr>
+                                                <th className="p-3">No. Rumah</th>
+                                                <th className="p-3">Nama Warga</th>
+                                                <th className="p-3">Alamat</th>
+                                                <th className="p-3">Status Iuran</th>
+                                                <th className="p-3">Tabungan Cor</th>
+                                                <th className="p-3">Tunggakan</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {members.map(m => (
+                                                <tr key={m.id} className="border-b">
+                                                    <td className="p-3 font-bold text-primary">{m.nomor_rumah}</td>
+                                                    <td className="p-3 font-semibold">{m.nama}</td>
+                                                    <td className="p-3 text-xs">{m.alamat}</td>
+                                                    <td className="p-3">
+                                                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${m.status_iuran === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>{m.status_iuran}</span>
+                                                    </td>
+                                                    <td className="p-3 font-bold text-warning">Rp {m.tabungan_cor.toLocaleString()}</td>
+                                                    <td className="p-3 font-bold text-danger">Rp {m.tunggakan.toLocaleString()}</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {filteredMembers.map(m => (
-                                                    <tr key={m.id} className="border-b border-slate-100 hover:bg-emerald-50/30 transition">
-                                                        <td className="p-3.5 font-bold text-slate-900">{m.nama}</td>
-                                                        <td className="p-3.5">{m.alamat || '-'}</td>
-                                                        <td className="p-3.5">{m.no_hp || '-'}</td>
-                                                        <td className="p-3.5">
-                                                            <span className={`px-3 py-1 rounded-xl text-xs font-bold ${m.status_iuran === 'Sudah Bayar' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
-                                                                {m.status_iuran || 'Belum Bayar'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-3.5 font-bold text-primary">Rp {(m.tabungan_cor || 0).toLocaleString()}</td>
-                                                        <td className="p-3.5 text-red-600 font-bold">Rp {(m.tunggakan || 0).toLocaleString()}</td>
-                                                        <td className="p-3.5 text-slate-500">{m.keterangan || '-'}</td>
-                                                    </tr>
-                                                ))}
-                                                {filteredMembers.length === 0 && <tr><td colSpan="7" className="p-8 text-center text-slate-400">Belum ada data warga.</td></tr>}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
 
+                            {/* DATA ASET */}
                             {activeTab === 'aset' && (
-                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
-                                    <h3 className="text-lg font-black text-darker mb-4">Data Aset Lingkungan</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm text-slate-600">
-                                            <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
-                                                <tr>
-                                                    <th className="p-3.5 rounded-l-xl">Nama Aset</th>
-                                                    <th className="p-3.5">Kategori</th>
-                                                    <th className="p-3.5">Nilai Pembelian</th>
-                                                    <th className="p-3.5">Kondisi</th>
-                                                    <th className="p-3.5 rounded-r-xl">Lokasi</th>
+                                <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                    <h3 className="text-lg font-black text-darker mb-2">Inventaris Aset Warga</h3>
+                                    <p className="text-xs text-slate-500 mb-6">Peralatan dan inventaris RT 44 / RW 13</p>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-emerald-50 text-darker text-xs uppercase">
+                                            <tr>
+                                                <th className="p-3">Nama Aset</th>
+                                                <th className="p-3">Kategori</th>
+                                                <th className="p-3">Kondisi</th>
+                                                <th className="p-3">Lokasi</th>
+                                                <th className="p-3">Nilai (Rp)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {assets.map(a => (
+                                                <tr key={a.id} className="border-b">
+                                                    <td className="p-3 font-bold text-darker">{a.nama_aset}</td>
+                                                    <td className="p-3">{a.kategori}</td>
+                                                    <td className="p-3"><span className="px-2 py-0.5 bg-emerald-100 text-primary rounded text-xs font-bold">{a.kondisi}</span></td>
+                                                    <td className="p-3 text-xs">{a.lokasi}</td>
+                                                    <td className="p-3 font-bold">Rp {a.nilai_pembelian.toLocaleString()}</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {assets.map(a => (
-                                                    <tr key={a.id} className="border-b border-slate-100 hover:bg-emerald-50/30">
-                                                        <td className="p-3.5 font-bold text-slate-900">{a.nama_aset}</td>
-                                                        <td className="p-3.5">{a.kategori}</td>
-                                                        <td className="p-3.5 font-semibold">Rp {(a.nilai_pembelian || 0).toLocaleString()}</td>
-                                                        <td className="p-3.5"><span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold">{a.kondisi || 'Baik'}</span></td>
-                                                        <td className="p-3.5">{a.lokasi || '-'}</td>
-                                                    </tr>
-                                                ))}
-                                                {assets.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">Belum ada data aset tercatat.</td></tr>}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
 
+                            {/* AUDIT LOG */}
                             {activeTab === 'audit' && user.role === 'SUPER_ADMIN' && (
-                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6">
-                                    <h3 className="text-lg font-black text-darker mb-4">Audit Log Aktivitas Sistem</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm text-slate-600">
-                                            <thead className="bg-emerald-50/70 text-darker font-bold border-b border-emerald-100 text-xs uppercase tracking-wider">
-                                                <tr>
-                                                    <th className="p-3.5 rounded-l-xl">Waktu</th>
-                                                    <th className="p-3.5">Aksi</th>
-                                                    <th className="p-3.5">Pelaku</th>
-                                                    <th className="p-3.5 rounded-r-xl">Detail</th>
+                                <div className="bg-white rounded-3xl shadow-sm border p-6">
+                                    <h3 className="text-lg font-black text-darker mb-4">Audit Log Sistem</h3>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-100 text-xs uppercase">
+                                            <tr><th className="p-3">Waktu</th><th className="p-3">Aksi</th><th className="p-3">Pelaku</th><th className="p-3">Detail</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {auditLogs.map(a => (
+                                                <tr key={a.id} className="border-b text-xs">
+                                                    <td className="p-3 text-slate-500">{a.waktu}</td>
+                                                    <td className="p-3 font-bold text-primary">{a.aksi}</td>
+                                                    <td className="p-3 font-semibold">{a.pelaku}</td>
+                                                    <td className="p-3">{a.detail}</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {auditLogs.map(l => (
-                                                    <tr key={l.id} className="border-b border-slate-100 hover:bg-emerald-50/30">
-                                                        <td className="p-3.5 text-slate-500">{l.waktu}</td>
-                                                        <td className="p-3.5 font-bold text-primary">{l.aksi}</td>
-                                                        <td className="p-3.5 font-semibold">{l.pelaku}</td>
-                                                        <td className="p-3.5">{l.detail}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'backup' && user.role === 'SUPER_ADMIN' && (
-                                <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-sm border border-emerald-100 p-6 max-w-xl">
-                                    <h3 className="text-lg font-black text-darker mb-2">Backup Database</h3>
-                                    <p className="text-xs text-slate-500 mb-6">Unduh salinan cadangan database SQLite untuk keamanan data lingkungan.</p>
-                                    <a href="/api/admin/backup" className="inline-flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-darker text-white font-bold rounded-2xl shadow-md transition text-sm">
-                                        <i className="fa-solid fa-download"></i><span>Download Backup SQLite</span>
-                                    </a>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
                         </div>
                     </main>
 
-                    {/* MODAL INPUT PENGURUS (ADMIN ONLY) */}
-                    {showModalLeader && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-100">
-                                <h3 className="text-lg font-black text-darker mb-1">Tambah Pengurus & PIC Baru</h3>
-                                <p className="text-xs text-slate-500 mb-4">Pengurus terdaftar dapat login menggunakan nomor WhatsApp.</p>
-                                <form onSubmit={handleSaveLeader} className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nama Lengkap Pengurus</label>
-                                        <input type="text" required value={formLeader.nama} onChange={e => setFormLeader({...formLeader, nama: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Nama Lengkap" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Jabatan / Peran</label>
-                                        <select value={formLeader.jabatan} onChange={e => setFormLeader({...formLeader, jabatan: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
-                                            <option value="Pengurus Gang">Pengurus Gang</option>
-                                            <option value="Pengurus Tabungan Cor Jalan">Pengurus Tabungan Cor Jalan</option>
-                                            <option value="Pengurus Jimpitan">Pengurus Jimpitan</option>
-                                            <option value="Koordinator Ibu-Ibu">Koordinator Ibu-Ibu</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nomor WhatsApp (Untuk Login OTP)</label>
-                                        <input type="text" required value={formLeader.no_hp} onChange={e => setFormLeader({...formLeader, no_hp: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="08xxxxxxxxxx" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">PIC Modul Input Transaksi</label>
-                                        <select value={formLeader.pic_modul} onChange={e => setFormLeader({...formLeader, pic_modul: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
-                                            <option value="Kas">Kas Warga</option>
-                                            <option value="Tabungan Cor">Tabungan Cor Jalan</option>
-                                            <option value="Jimpitan">Jimpitan</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex justify-end space-x-3 pt-4">
-                                        <button type="button" onClick={() => setShowModalLeader(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
-                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Pengurus</button>
-                                    </div>
-                                </form>
-                            </div>
+                    {/* MODAL AGENDA */}
+                    {showModalAgenda && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <form onSubmit={handleSaveAgenda} className="bg-white max-w-md w-full rounded-3xl p-6 space-y-4">
+                                <h3 className="font-black text-darker text-lg">Tambah Agenda Kegiatan Warga</h3>
+                                <div><label className="block text-xs font-bold mb-1">Judul Kegiatan</label><input type="text" required value={formAgenda.judul} onChange={e => setFormAgenda({...formAgenda, judul: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div><label className="block text-xs font-bold mb-1">Tanggal</label><input type="date" required value={formAgenda.tanggal} onChange={e => setFormAgenda({...formAgenda, tanggal: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                    <div><label className="block text-xs font-bold mb-1">Waktu</label><input type="text" value={formAgenda.waktu} onChange={e => setFormAgenda({...formAgenda, waktu: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                </div>
+                                <div><label className="block text-xs font-bold mb-1">Lokasi</label><input type="text" value={formAgenda.lokasi} onChange={e => setFormAgenda({...formAgenda, lokasi: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Deskripsi</label><textarea value={formAgenda.deskripsi} onChange={e => setFormAgenda({...formAgenda, deskripsi: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm"></textarea></div>
+                                <div className="flex gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowModalAgenda(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">Batal</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-primary text-white font-bold rounded-xl text-xs">Simpan Agenda</button>
+                                </div>
+                            </form>
                         </div>
                     )}
 
-                    {/* MODAL INPUT TRANSAKSI KEUANGAN */}
-                    {showModalKeuangan && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-100">
-                                <h3 className="text-lg font-black text-darker mb-1">Catat Transaksi {formKeuangan.kategori_transaksi}</h3>
-                                <p className="text-xs text-slate-500 mb-4">Dicatat oleh PIC: <span className="font-bold text-primary">{user.nama}</span></p>
-                                <form onSubmit={handleSaveKeuangan} className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Tanggal</label>
-                                            <input type="date" required value={formKeuangan.tanggal} onChange={e => setFormKeuangan({...formKeuangan, tanggal: e.target.value})} className="w-full px-3.5 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Jenis Transaksi</label>
-                                            <select value={formKeuangan.jenis} onChange={e => setFormKeuangan({...formKeuangan, jenis: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
-                                                <option value="masuk">Pemasukan (+)</option>
-                                                <option value="keluar">Pengeluaran (-)</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nominal (Rp)</label>
-                                        <input type="number" required min="1" value={formKeuangan.nominal} onChange={e => setFormKeuangan({...formKeuangan, nominal: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Contoh: 50000" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Uraian / Keterangan</label>
-                                        <input type="text" required value={formKeuangan.uraian} onChange={e => setFormKeuangan({...formKeuangan, uraian: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Contoh: Iuran Kas Blok C3/01" />
-                                    </div>
-                                    <div className="flex justify-end space-x-3 pt-4">
-                                        <button type="button" onClick={() => setShowModalKeuangan(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
-                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Transaksi</button>
-                                    </div>
-                                </form>
-                            </div>
+                    {/* MODAL PENGELUARAN KAS */}
+                    {showModalPengeluaran && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <form onSubmit={handleSavePengeluaran} className="bg-white max-w-md w-full rounded-3xl p-6 space-y-4">
+                                <h3 className="font-black text-darker text-lg">Catat Pengeluaran Kas</h3>
+                                <div><label className="block text-xs font-bold mb-1">Tanggal</label><input type="date" required value={formPengeluaran.tanggal} onChange={e => setFormPengeluaran({...formPengeluaran, tanggal: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Uraian / Keperluan</label><input type="text" required value={formPengeluaran.uraian} onChange={e => setFormPengeluaran({...formPengeluaran, uraian: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" placeholder="Contoh: Perbaikan lampu jalan RT" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Nominal Keluar (Rp)</label><input type="number" required value={formPengeluaran.keluar} onChange={e => setFormPengeluaran({...formPengeluaran, keluar: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold text-red-600" /></div>
+                                <div className="flex gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowModalPengeluaran(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">Batal</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs">Simpan Pengeluaran</button>
+                                </div>
+                            </form>
                         </div>
                     )}
 
-                    {/* MODAL INPUT WARGA */}
+                    {/* MODAL WARGA */}
                     {showModalWarga && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-100">
-                                <h3 className="text-lg font-black text-darker mb-4">Input Data Warga Baru</h3>
-                                <form onSubmit={handleSaveWarga} className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nama Warga</label>
-                                        <input type="text" required value={formWarga.nama} onChange={e => setFormWarga({...formWarga, nama: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Nama Lengkap" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Alamat / No Rumah</label>
-                                            <input type="text" value={formWarga.alamat} onChange={e => setFormWarga({...formWarga, alamat: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Blok C3/C8" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">No HP / WhatsApp</label>
-                                            <input type="text" value={formWarga.no_hp} onChange={e => setFormWarga({...formWarga, no_hp: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="08xxxxxxxxxx" />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Status Iuran</label>
-                                            <select value={formWarga.status_iuran} onChange={e => setFormWarga({...formWarga, status_iuran: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none">
-                                                <option value="Belum Bayar">Belum Bayar</option>
-                                                <option value="Sudah Bayar">Sudah Bayar</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Tabungan Cor (Rp)</label>
-                                            <input type="number" value={formWarga.tabungan_cor} onChange={e => setFormWarga({...formWarga, tabungan_cor: Number(e.target.value)})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Tunggakan (Rp)</label>
-                                            <input type="number" value={formWarga.tunggakan} onChange={e => setFormWarga({...formWarga, tunggakan: Number(e.target.value)})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Keterangan</label>
-                                            <input type="text" value={formWarga.keterangan} onChange={e => setFormWarga({...formWarga, keterangan: e.target.value})} className="w-full px-4 py-2.5 border rounded-2xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Catatan" />
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-end space-x-3 pt-4">
-                                        <button type="button" onClick={() => setShowModalWarga(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-300">Batal</button>
-                                        <button type="submit" className="px-5 py-2.5 bg-primary text-white rounded-2xl text-xs font-bold hover:bg-darker shadow-md">Simpan Data</button>
-                                    </div>
-                                </form>
-                            </div>
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <form onSubmit={handleSaveWarga} className="bg-white max-w-md w-full rounded-3xl p-6 space-y-4">
+                                <h3 className="font-black text-darker text-lg">Tambah Data Warga</h3>
+                                <div><label className="block text-xs font-bold mb-1">Nomor Rumah (Cth: C3-01)</label><input type="text" required value={formWarga.nomor_rumah} onChange={e => setFormWarga({...formWarga, nomor_rumah: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Nama Kepala Keluarga</label><input type="text" required value={formWarga.nama} onChange={e => setFormWarga({...formWarga, nama: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Alamat / Blok</label><input type="text" value={formWarga.alamat} onChange={e => setFormWarga({...formWarga, alamat: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">No. WhatsApp</label><input type="text" value={formWarga.no_hp} onChange={e => setFormWarga({...formWarga, no_hp: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div className="flex gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowModalWarga(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">Batal</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-primary text-white font-bold rounded-xl text-xs">Simpan Warga</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* MODAL PENGURUS */}
+                    {showModalLeader && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <form onSubmit={handleSaveLeader} className="bg-white max-w-md w-full rounded-3xl p-6 space-y-4">
+                                <h3 className="font-black text-darker text-lg">Tambah Pengurus & PIC</h3>
+                                <div><label className="block text-xs font-bold mb-1">Nama Lengkap</label><input type="text" required value={formLeader.nama} onChange={e => setFormLeader({...formLeader, nama: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Jabatan</label><input type="text" required value={formLeader.jabatan} onChange={e => setFormLeader({...formLeader, jabatan: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div><label className="block text-xs font-bold mb-1">Alamat Rumah</label><input type="text" value={formLeader.alamat} onChange={e => setFormLeader({...formLeader, alamat: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" placeholder="Blok C3 No..." /></div>
+                                <div><label className="block text-xs font-bold mb-1">No. WhatsApp</label><input type="text" required value={formLeader.no_hp} onChange={e => setFormLeader({...formLeader, no_hp: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" /></div>
+                                <div>
+                                    <label className="block text-xs font-bold mb-1">PIC Modul Tugas</label>
+                                    <select value={formLeader.pic_modul} onChange={e => setFormLeader({...formLeader, pic_modul: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+                                        <option value="Kas Gang">Kas Gang</option>
+                                        <option value="Cor Jalan">Cor Jalan</option>
+                                        <option value="Jimpitan">Jimpitan</option>
+                                    </select>
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowModalLeader(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">Batal</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-primary text-white font-bold rounded-xl text-xs">Simpan Pengurus</button>
+                                </div>
+                            </form>
                         </div>
                     )}
                 </div>
