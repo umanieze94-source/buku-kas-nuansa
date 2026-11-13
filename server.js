@@ -231,7 +231,7 @@ app.post('/api/auth/verify-otp', asyncRoute(async (req, res) => {
     let userData = null;
     if (role_target === 'PENGURUS') {
         const leader = await get('SELECT * FROM leaders WHERE no_hp = ?', [no_hp]);
-        userData = { id: leader.id, nama: leader.nama, role: 'PENGURUS', jabatan: leader.jabatan };
+        userData = { id: leader.id, nama: leader.nama, role: 'PENGURUS', jabatan: leader.jabatan, pic_modul: leader.pic_modul };
     } else {
         const member = await get('SELECT * FROM members WHERE no_hp = ?', [no_hp]);
         userData = { id: member.id, nama: member.nama, role: 'WARGA', alamat: member.alamat };
@@ -267,7 +267,7 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     });
 }));
 
-// KEUANGAN (KAS WARGA, IURAN COR JALAN, JIMPITAN)
+// KEUANGAN
 app.get('/api/keuangan', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM keuangan ORDER BY tanggal DESC, id DESC');
     res.json({ success: true, data: rows });
@@ -283,7 +283,27 @@ app.post('/api/keuangan', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Transaksi berhasil dicatat.' });
 }));
 
-// WARGA, PENGURUS, ASET, AUDIT LOG, BACKUP
+// DATA PENGURUS (CRUD ADMIN)
+app.get('/api/leaders', asyncRoute(async (req, res) => {
+    const rows = await all('SELECT * FROM leaders ORDER BY id');
+    res.json({ success: true, data: rows });
+}));
+
+app.post('/api/leaders', asyncRoute(async (req, res) => {
+    const { nama, jabatan, no_hp, pic_modul, actor } = req.body;
+    await run('INSERT INTO leaders (nama, jabatan, no_hp, pic_modul) VALUES (?, ?, ?, ?)', [nama, jabatan, no_hp, pic_modul || 'Kas Gang']);
+    await logAudit('TAMBAH PENGURUS', actor || 'Admin', `Menambahkan pengurus: ${nama} (${jabatan})`);
+    res.json({ success: true, message: 'Data pengurus berhasil ditambahkan.' });
+}));
+
+app.delete('/api/leaders/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    await run('DELETE FROM leaders WHERE id = ?', [id]);
+    await logAudit('HAPUS PENGURUS', 'Admin', `Menghapus pengurus ID: ${id}`);
+    res.json({ success: true, message: 'Data pengurus berhasil dihapus.' });
+}));
+
+// WARGA, ASET, AUDIT, BACKUP
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -297,18 +317,6 @@ app.post('/api/members', asyncRoute(async (req, res) => {
     );
     await logAudit('TAMBAH WARGA', actor || 'Admin', `Menambahkan warga: ${nama}`);
     res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
-}));
-
-app.get('/api/leaders', asyncRoute(async (req, res) => {
-    const rows = await all('SELECT * FROM leaders ORDER BY nama');
-    res.json({ success: true, data: rows });
-}));
-
-app.post('/api/leaders', asyncRoute(async (req, res) => {
-    const { nama, jabatan, no_hp, pic_modul, actor } = req.body;
-    await run('INSERT INTO leaders (nama, jabatan, no_hp, pic_modul) VALUES (?, ?, ?, ?)', [nama, jabatan, no_hp, pic_modul]);
-    await logAudit('TAMBAH PENGURUS', actor || 'Admin', `Menambahkan pengurus: ${nama}`);
-    res.json({ success: true, message: 'Pengurus berhasil ditambahkan.' });
 }));
 
 app.get('/api/assets', asyncRoute(async (req, res) => {
