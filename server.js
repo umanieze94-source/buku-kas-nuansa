@@ -142,7 +142,6 @@ async function initDatabase() {
             keterangan TEXT
         );
 
-        -- TABEL TAMBAHAN AGENDA WARGA (AMAN & TERISOLASI)
         CREATE TABLE IF NOT EXISTS agendas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             judul TEXT NOT NULL,
@@ -176,7 +175,7 @@ async function initDatabase() {
     }
 }
 
-// 1. LOGIN ADMIN
+// LOGIN ADMIN
 app.post('/api/login/admin', asyncRoute(async (req, res) => {
     const { email, password } = req.body;
     const user = await get('SELECT * FROM users WHERE email = ?', [email]);
@@ -192,7 +191,7 @@ app.post('/api/login/admin', asyncRoute(async (req, res) => {
     });
 }));
 
-// REQUEST OTP (PENGURUS / WARGA)
+// REQUEST OTP
 app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
     const { no_hp, role_target } = req.body;
     
@@ -225,7 +224,7 @@ app.post('/api/auth/request-otp', asyncRoute(async (req, res) => {
     });
 }));
 
-// VERIFY OTP & LOGIN (PENGURUS / WARGA)
+// VERIFY OTP
 app.post('/api/auth/verify-otp', asyncRoute(async (req, res) => {
     const { no_hp, otp, role_target } = req.body;
 
@@ -279,7 +278,7 @@ app.get('/api/dashboard/stats', asyncRoute(async (req, res) => {
     });
 }));
 
-// KEUANGAN
+// KEUANGAN (CRUD + PUT EDIT)
 app.get('/api/keuangan', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM keuangan ORDER BY tanggal DESC, id DESC');
     res.json({ success: true, data: rows });
@@ -295,7 +294,18 @@ app.post('/api/keuangan', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Transaksi berhasil dicatat.' });
 }));
 
-// DATA PENGURUS (CRUD ADMIN)
+app.put('/api/keuangan/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    const { kategori_transaksi, tanggal, uraian, masuk, keluar, actor } = req.body;
+    await run(
+        `UPDATE keuangan SET kategori_transaksi = ?, tanggal = ?, uraian = ?, masuk = ?, keluar = ? WHERE id = ?`,
+        [kategori_transaksi, tanggal, uraian, Number(masuk) || 0, Number(keluar) || 0, id]
+    );
+    await logAudit('KOREKSI KEUANGAN', actor || 'Admin', `Memperbarui transaksi ID ${id}: ${uraian}`);
+    res.json({ success: true, message: 'Data transaksi berhasil diperbarui.' });
+}));
+
+// LEADERS
 app.get('/api/leaders', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM leaders ORDER BY id');
     res.json({ success: true, data: rows });
@@ -315,7 +325,7 @@ app.delete('/api/leaders/:id', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Data pengurus berhasil dihapus.' });
 }));
 
-// WARGA, ASET, AUDIT, BACKUP
+// MEMBERS (CRUD + PUT EDIT)
 app.get('/api/members', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM members ORDER BY nama');
     res.json({ success: true, data: rows });
@@ -331,6 +341,18 @@ app.post('/api/members', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Warga berhasil ditambahkan.' });
 }));
 
+app.put('/api/members/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    const { nik, nama, alamat, no_hp, kategori, status_iuran, tabungan_cor, tunggakan, keterangan, actor } = req.body;
+    await run(
+        `UPDATE members SET nik = ?, nama = ?, alamat = ?, no_hp = ?, kategori = ?, status_iuran = ?, tabungan_cor = ?, tunggakan = ?, keterangan = ? WHERE id = ?`,
+        [nik, nama, alamat, no_hp, kategori, status_iuran, Number(tabungan_cor) || 0, Number(tunggakan) || 0, keterangan, id]
+    );
+    await logAudit('KOREKSI WARGA', actor || 'Admin', `Memperbarui data warga: ${nama} (ID: ${id})`);
+    res.json({ success: true, message: 'Data warga berhasil diperbarui.' });
+}));
+
+// ASSETS (CRUD + PUT EDIT)
 app.get('/api/assets', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM assets ORDER BY id DESC');
     res.json({ success: true, data: rows });
@@ -339,12 +361,23 @@ app.get('/api/assets', asyncRoute(async (req, res) => {
 app.post('/api/assets', asyncRoute(async (req, res) => {
     const { nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan, actor } = req.body;
     await run('INSERT INTO assets (nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [nama_aset, kategori, tanggal_pembelian, nilai_pembelian || 0, kondisi, lokasi, keterangan]);
+        [nama_aset, kategori, tanggal_pembelian, Number(nilai_pembelian) || 0, kondisi, lokasi, keterangan]);
     await logAudit('TAMBAH ASET', actor || 'Admin', `Mencatat aset: ${nama_aset}`);
     res.json({ success: true, message: 'Aset berhasil dicatat.' });
 }));
 
-// --- ENDPOINT AGENDA WARGA BARU ---
+app.put('/api/assets/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    const { nama_aset, kategori, tanggal_pembelian, nilai_pembelian, kondisi, lokasi, keterangan, actor } = req.body;
+    await run(
+        `UPDATE assets SET nama_aset = ?, kategori = ?, tanggal_pembelian = ?, nilai_pembelian = ?, kondisi = ?, lokasi = ?, keterangan = ? WHERE id = ?`,
+        [nama_aset, kategori, tanggal_pembelian, Number(nilai_pembelian) || 0, kondisi, lokasi, keterangan, id]
+    );
+    await logAudit('KOREKSI ASET', actor || 'Admin', `Memperbarui aset: ${nama_aset} (ID: ${id})`);
+    res.json({ success: true, message: 'Data aset berhasil diperbarui.' });
+}));
+
+// AGENDAS (CRUD + PUT EDIT)
 app.get('/api/agendas', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM agendas ORDER BY tanggal ASC');
     res.json({ success: true, data: rows });
@@ -360,14 +393,25 @@ app.post('/api/agendas', asyncRoute(async (req, res) => {
     res.json({ success: true, message: 'Agenda berhasil ditambahkan.' });
 }));
 
+app.put('/api/agendas/:id', asyncRoute(async (req, res) => {
+    const { id } = req.params;
+    const { judul, tanggal, waktu, lokasi, kategori, deskripsi, actor } = req.body;
+    await run(
+        `UPDATE agendas SET judul = ?, tanggal = ?, waktu = ?, lokasi = ?, kategori = ?, deskripsi = ? WHERE id = ?`,
+        [judul, tanggal, waktu, lokasi, kategori, deskripsi, id]
+    );
+    await logAudit('KOREKSI AGENDA', actor || 'Admin', `Memperbarui agenda: ${judul} (ID: ${id})`);
+    res.json({ success: true, message: 'Agenda berhasil diperbarui.' });
+}));
+
 app.delete('/api/agendas/:id', asyncRoute(async (req, res) => {
     const { id } = req.params;
     await run('DELETE FROM agendas WHERE id = ?', [id]);
     await logAudit('HAPUS AGENDA', 'Admin', `Menghapus agenda ID: ${id}`);
     res.json({ success: true, message: 'Agenda berhasil dihapus.' });
 }));
-// ---------------------------------
 
+// AUDIT LOGS & BACKUP
 app.get('/api/audit-logs', asyncRoute(async (req, res) => {
     const rows = await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100');
     res.json({ success: true, data: rows });
